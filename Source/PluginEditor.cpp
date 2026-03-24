@@ -331,11 +331,103 @@ BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProce
     addAndMakeVisible(masterVolKnob_);
     addAndMakeVisible(glideKnob_);
 
+    // ── Effects components ────────────────────────────────────────────────────
+    for (auto* c : { &reverbSection_, &delaySection_, &chorusSection_ })
+        addAndMakeVisible(c);
+    for (auto* k : { &revRoomKnob_, &revDampKnob_, &revWidthKnob_, &revWetKnob_ })
+        addAndMakeVisible(k);
+    for (auto* k : { &delTimeKnob_, &delFbKnob_, &delWetKnob_ })
+        addAndMakeVisible(k);
+    for (auto* k : { &choRateKnob_, &choDepthKnob_, &choWetKnob_ })
+        addAndMakeVisible(k);
+
+    revRoomAtt_  = std::make_unique<SA>(par, "reverb_room",  revRoomKnob_.slider);
+    revDampAtt_  = std::make_unique<SA>(par, "reverb_damp",  revDampKnob_.slider);
+    revWidthAtt_ = std::make_unique<SA>(par, "reverb_width", revWidthKnob_.slider);
+    revWetAtt_   = std::make_unique<SA>(par, "reverb_wet",   revWetKnob_.slider);
+    delTimeAtt_  = std::make_unique<SA>(par, "delay_time",   delTimeKnob_.slider);
+    delFbAtt_    = std::make_unique<SA>(par, "delay_fb",     delFbKnob_.slider);
+    delWetAtt_   = std::make_unique<SA>(par, "delay_wet",    delWetKnob_.slider);
+    choRateAtt_  = std::make_unique<SA>(par, "chorus_rate",  choRateKnob_.slider);
+    choDepthAtt_ = std::make_unique<SA>(par, "chorus_depth", choDepthKnob_.slider);
+    choWetAtt_   = std::make_unique<SA>(par, "chorus_wet",   choWetKnob_.slider);
+
+    // ── Envelope displays ─────────────────────────────────────────────────────
+    ampEnvDisplay_.colour = BCol::green;
+    fEnvDisplay_.colour   = BCol::amber;
+    addAndMakeVisible(ampEnvDisplay_);
+    addAndMakeVisible(fEnvDisplay_);
+
+    // ── Tab bar ───────────────────────────────────────────────────────────────
+    for (auto* b : { &synthTabBtn_, &effectsTabBtn_ }) {
+        b->setColour(juce::TextButton::buttonColourId,    BCol::knobBg);
+        b->setColour(juce::TextButton::buttonOnColourId,  BCol::accent.withAlpha(0.3f));
+        b->setColour(juce::TextButton::textColourOffId,   BCol::textDim);
+        b->setColour(juce::TextButton::textColourOnId,    BCol::accent);
+        b->setClickingTogglesState(false);
+        addAndMakeVisible(b);
+    }
+    synthTabBtn_.setToggleState(true, juce::dontSendNotification);
+    synthTabBtn_.onClick   = [this] { setTab(Tab::Synth);   };
+    effectsTabBtn_.onClick = [this] { setTab(Tab::Effects); };
+
+    setEffectsVisible(false);
+
     buildPresetBrowser();
+    startTimerHz(20);   // 20 Hz for envelope display updates
 }
 
 BombSynthAudioProcessorEditor::~BombSynthAudioProcessorEditor() {
     setLookAndFeel(nullptr);
+}
+
+// ─── Tab helpers ─────────────────────────────────────────────────────────────
+void BombSynthAudioProcessorEditor::setSynthVisible(bool v) {
+    for (auto& osc : oscs_)          osc.setVisible(v);
+    oscSection_.setVisible(v);
+    filterSection_.setVisible(v);
+    for (auto* k : { &cutoffKnob_, &resKnob_, &driveKnob_, &envAmtKnob_ }) k->setVisible(v);
+    filterTypeBox_.setVisible(v);  filterTypeLabel_.setVisible(v);
+    ampEnvSection_.setVisible(v);
+    for (auto* k : { &ampAttKnob_, &ampDecKnob_, &ampSusKnob_, &ampRelKnob_, &ampCrvKnob_ }) k->setVisible(v);
+    filterEnvSection_.setVisible(v);
+    for (auto* k : { &fEnvAttKnob_, &fEnvDecKnob_, &fEnvSusKnob_, &fEnvRelKnob_ }) k->setVisible(v);
+    lfo1Section_.setVisible(v); lfo1ShapeBox_.setVisible(v); lfo1ShapeLabel_.setVisible(v);
+    for (auto* k : { &lfo1RateKnob_, &lfo1DepthKnob_, &lfo1PhaseKnob_ }) k->setVisible(v);
+    lfo2Section_.setVisible(v); lfo2ShapeBox_.setVisible(v); lfo2ShapeLabel_.setVisible(v);
+    for (auto* k : { &lfo2RateKnob_, &lfo2DepthKnob_ }) k->setVisible(v);
+    masterSection_.setVisible(v);
+    masterVolKnob_.setVisible(v); glideKnob_.setVisible(v);
+    ampEnvDisplay_.setVisible(v);  fEnvDisplay_.setVisible(v);
+}
+
+void BombSynthAudioProcessorEditor::setEffectsVisible(bool v) {
+    reverbSection_.setVisible(v);
+    for (auto* k : { &revRoomKnob_, &revDampKnob_, &revWidthKnob_, &revWetKnob_ }) k->setVisible(v);
+    delaySection_.setVisible(v);
+    for (auto* k : { &delTimeKnob_, &delFbKnob_, &delWetKnob_ }) k->setVisible(v);
+    chorusSection_.setVisible(v);
+    for (auto* k : { &choRateKnob_, &choDepthKnob_, &choWetKnob_ }) k->setVisible(v);
+}
+
+void BombSynthAudioProcessorEditor::setTab(Tab t) {
+    activeTab_ = t;
+    synthTabBtn_  .setToggleState(t == Tab::Synth,   juce::dontSendNotification);
+    effectsTabBtn_.setToggleState(t == Tab::Effects, juce::dontSendNotification);
+    setSynthVisible  (t == Tab::Synth);
+    setEffectsVisible(t == Tab::Effects);
+    resized();
+    repaint();
+}
+
+void BombSynthAudioProcessorEditor::timerCallback() {
+    auto& par = proc_.parameters();
+    auto getF = [&](const char* id) { return par.getRawParameterValue(id)->load(); };
+    auto norm = [](float ms) { return std::pow(ms / 10000.f, 0.25f); };
+    ampEnvDisplay_.setADSR(norm(getF("amp_attack")),  norm(getF("amp_decay")),
+                            getF("amp_sustain"),       norm(getF("amp_release")));
+    fEnvDisplay_.setADSR  (norm(getF("fenv_attack")), norm(getF("fenv_decay")),
+                            getF("fenv_sustain"),      norm(getF("fenv_release")));
 }
 
 // ─── Preset browser helpers ───────────────────────────────────────────────────
@@ -484,7 +576,7 @@ void BombSynthAudioProcessorEditor::paint(juce::Graphics& g) {
 
     g.setFont(juce::Font(10.f));
     g.setColour(BCol::textDim);
-    g.drawText("v0.2.0  |  Illbomb", getWidth() - 200, 0, 140, hH,
+    g.drawText("v0.3.0  |  Illbomb", getWidth() - 200, 0, 140, hH,
                juce::Justification::centredRight);
 }
 
@@ -513,8 +605,60 @@ void BombSynthAudioProcessorEditor::resized() {
         nextBtn_       .setBounds(startX, barY, btnW, barH);
     }
 
-    auto area = getLocalBounds().withTrimmedTop(hH).reduced(pad);
+    // ── Tab bar ───────────────────────────────────────────────────────────────
+    {
+        const int tabH = 28, tabW = 90, gap = 4;
+        int tx = pad;
+        int ty = hH + 2;
+        synthTabBtn_  .setBounds(tx,          ty, tabW, tabH);
+        effectsTabBtn_.setBounds(tx + tabW + gap, ty, tabW, tabH);
+    }
+
+    const int kTabBarH = 32;
+    auto area = getLocalBounds().withTrimmedTop(hH + kTabBarH).reduced(pad);
     const int aW = area.getWidth(); (void)aW;
+
+    if (activeTab_ == Tab::Effects) {
+        // ── EFFECTS tab layout ────────────────────────────────────────────────
+        const int sectionW = (area.getWidth() - pad * 2) / 3;
+        auto row = area;
+
+        // REVERB
+        auto revBounds = row.removeFromLeft(sectionW);
+        reverbSection_.setBounds(revBounds);
+        auto revContent = reverbSection_.getContentArea().translated(revBounds.getX(), revBounds.getY());
+        int kw = (revContent.getWidth() - pad * 3) / 4;
+        auto rc = revContent;
+        revRoomKnob_ .setBounds(rc.removeFromLeft(kw)); rc.removeFromLeft(pad);
+        revDampKnob_ .setBounds(rc.removeFromLeft(kw)); rc.removeFromLeft(pad);
+        revWidthKnob_.setBounds(rc.removeFromLeft(kw)); rc.removeFromLeft(pad);
+        revWetKnob_  .setBounds(rc.removeFromLeft(kw));
+        row.removeFromLeft(pad);
+
+        // DELAY
+        auto delBounds = row.removeFromLeft(sectionW);
+        delaySection_.setBounds(delBounds);
+        auto delContent = delaySection_.getContentArea().translated(delBounds.getX(), delBounds.getY());
+        int dw = (delContent.getWidth() - pad * 2) / 3;
+        auto dc = delContent;
+        delTimeKnob_.setBounds(dc.removeFromLeft(dw)); dc.removeFromLeft(pad);
+        delFbKnob_  .setBounds(dc.removeFromLeft(dw)); dc.removeFromLeft(pad);
+        delWetKnob_ .setBounds(dc.removeFromLeft(dw));
+        row.removeFromLeft(pad);
+
+        // CHORUS
+        auto choBounds = row;
+        chorusSection_.setBounds(choBounds);
+        auto choContent = chorusSection_.getContentArea().translated(choBounds.getX(), choBounds.getY());
+        int cw = (choContent.getWidth() - pad * 2) / 3;
+        auto cc = choContent;
+        choRateKnob_ .setBounds(cc.removeFromLeft(cw)); cc.removeFromLeft(pad);
+        choDepthKnob_.setBounds(cc.removeFromLeft(cw)); cc.removeFromLeft(pad);
+        choWetKnob_  .setBounds(cc.removeFromLeft(cw));
+        return;
+    }
+
+    // ── SYNTH tab layout (existing) ───────────────────────────────────────────
 
     // ── Row 1: Oscillators ────────────────────────────────────────────────────
     auto row1 = area.removeFromTop(220);
@@ -547,19 +691,29 @@ void BombSynthAudioProcessorEditor::resized() {
     int ampW = (int)(area.getWidth() * 0.355f);
     auto ampB = row2.removeFromLeft(ampW);
     ampEnvSection_.setBounds(ampB);
-    auto ac = ampEnvSection_.getContentArea().translated(ampB.getX(), ampB.getY());
-    const int akW = ac.getWidth() / 5;
-    for (auto* k : { &ampAttKnob_, &ampDecKnob_, &ampSusKnob_, &ampRelKnob_, &ampCrvKnob_ })
-        k->setBounds(ac.removeFromLeft(akW));
+    {
+        auto ac = ampEnvSection_.getContentArea().translated(ampB.getX(), ampB.getY());
+        // Envelope display strip (top 42px)
+        ampEnvDisplay_.setBounds(ac.removeFromTop(42));
+        ac.removeFromTop(2);
+        const int akW = ac.getWidth() / 5;
+        for (auto* k : { &ampAttKnob_, &ampDecKnob_, &ampSusKnob_, &ampRelKnob_, &ampCrvKnob_ })
+            k->setBounds(ac.removeFromLeft(akW));
+    }
 
     row2.removeFromLeft(pad);
 
     // Filter env (remainder)
     filterEnvSection_.setBounds(row2);
-    auto fec = filterEnvSection_.getContentArea().translated(row2.getX(), row2.getY());
-    const int fekW = fec.getWidth() / 4;
-    for (auto* k : { &fEnvAttKnob_, &fEnvDecKnob_, &fEnvSusKnob_, &fEnvRelKnob_ })
-        k->setBounds(fec.removeFromLeft(fekW));
+    {
+        auto fec = filterEnvSection_.getContentArea().translated(row2.getX(), row2.getY());
+        // Envelope display strip (top 42px)
+        fEnvDisplay_.setBounds(fec.removeFromTop(42));
+        fec.removeFromTop(2);
+        const int fekW = fec.getWidth() / 4;
+        for (auto* k : { &fEnvAttKnob_, &fEnvDecKnob_, &fEnvSusKnob_, &fEnvRelKnob_ })
+            k->setBounds(fec.removeFromLeft(fekW));
+    }
 
     area.removeFromTop(pad);
 

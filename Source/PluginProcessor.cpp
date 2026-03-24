@@ -79,6 +79,32 @@ juce::AudioProcessorValueTreeState::ParameterLayout BombSynthAudioProcessor::cre
     p.push_back(std::make_unique<juce::AudioParameterFloat>("lfo2_depth", "LFO2 Depth",
         juce::NormalisableRange<float>{0.f, 1.f}, 0.f));
 
+    // ── Reverb ────────────────────────────────────────────────────────────────
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("reverb_room",  "Reverb Room",
+        juce::NormalisableRange<float>{0.f, 1.f}, 0.5f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("reverb_damp",  "Reverb Damp",
+        juce::NormalisableRange<float>{0.f, 1.f}, 0.5f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("reverb_width", "Reverb Width",
+        juce::NormalisableRange<float>{0.f, 1.f}, 1.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("reverb_wet",   "Reverb Wet",
+        juce::NormalisableRange<float>{0.f, 1.f}, 0.f));
+
+    // ── Delay ─────────────────────────────────────────────────────────────────
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("delay_time", "Delay Time",
+        juce::NormalisableRange<float>{1.f, 2000.f, 0.f, 0.4f}, 250.f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("delay_fb",   "Delay Feedback",
+        juce::NormalisableRange<float>{0.f, 0.95f}, 0.4f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("delay_wet",  "Delay Wet",
+        juce::NormalisableRange<float>{0.f, 1.f}, 0.f));
+
+    // ── Chorus ────────────────────────────────────────────────────────────────
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("chorus_rate",  "Chorus Rate",
+        juce::NormalisableRange<float>{0.1f, 8.f, 0.f, 0.5f}, 1.5f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("chorus_depth", "Chorus Depth",
+        juce::NormalisableRange<float>{0.f, 1.f}, 0.5f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("chorus_wet",   "Chorus Wet",
+        juce::NormalisableRange<float>{0.f, 1.f}, 0.f));
+
     return { p.begin(), p.end() };
 }
 
@@ -91,7 +117,30 @@ BombSynthAudioProcessor::BombSynthAudioProcessor()
 }
 
 void BombSynthAudioProcessor::prepareToPlay(double sr, int blockSize) {
+    sampleRate_ = sr;
     engine_.prepare(sr, blockSize);
+
+    // Reverb
+    {
+        juce::dsp::ProcessSpec revSpec;
+        revSpec.sampleRate       = sr;
+        revSpec.maximumBlockSize = (juce::uint32)blockSize;
+        revSpec.numChannels      = 2;
+        reverb_.prepare(revSpec);
+        reverb_.reset();
+    }
+
+    // Chorus
+    juce::dsp::ProcessSpec spec;
+    spec.sampleRate       = sr;
+    spec.maximumBlockSize = (juce::uint32)blockSize;
+    spec.numChannels      = 2;
+    chorus_.prepare(spec);
+
+    // Delay ring buffers (2s max)
+    const int maxSmp = (int)(sr * 2.0) + 1;
+    for (auto& buf : delayBuf_) { buf.assign(maxSmp, 0.f); }
+    delayWrite_ = 0;
 }
 void BombSynthAudioProcessor::releaseResources() { engine_.reset(); }
 
@@ -142,6 +191,68 @@ void BombSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::
     engine_.setFilterEnvParams(fenv);
     engine_.setMasterGain(get("master_gain"));
     engine_.processBlock(buf, midi);
+
+    const int numSamples = buf.getNumSamples();
+    if (buf.getNumChannels() < 2) return;
+
+    float* L = buf.getWritePointer(0);
+    float* R = buf.getWritePointer(1);
+
+    // ── Delay ─────────────────────────────────────────────────────────────────
+    {
+        const float delayWet = get("delay_wet");
+        if (delayWet > 0.001f) {
+            const float fb   = get("delay_fb");
+            const int   dSmp = juce::jlimit(1, (int)delayBuf_[0].size() - 1,
+                                             (int)(get("delay_time") * 0.001f * sampleRate_));
+            const int   bufSz = (int)delayBuf_[0].size();
+
+            for (int i = 0; i < numSamples; ++i) {
+                int rPos = (delayWrite_ - dSmp + bufSz) % bufSz;
+                float dL = delayBuf_[0][rPos];
+                float dR = delayBuf_[1][rPos];
+                delayBuf_[0][delayWrite_] = L[i] + dL * fb;
+                delayBuf_[1][delayWrite_] = R[i] + dR * fb;
+                L[i] = L[i] * (1.f - delayWet) + dL * delayWet;
+                R[i] = R[i] * (1.f - delayWet) + dR * delayWet;
+                delayWrite_ = (delayWrite_ + 1) % bufSz;
+            }
+        }
+    }
+
+    // ── Chorus ────────────────────────────────────────────────────────────────
+    {
+        const float choWet = get("chorus_wet");
+        if (choWet > 0.001f) {
+            chorus_.setRate       (get("chorus_rate"));
+            chorus_.setDepth      (get("chorus_depth"));
+            chorus_.setCentreDelay(7.f);
+            chorus_.setFeedback   (0.f);
+            chorus_.setMix        (choWet);
+
+            juce::dsp::AudioBlock<float>            block(buf);
+            juce::dsp::ProcessContextReplacing<float> ctx(block);
+            chorus_.process(ctx);
+        }
+    }
+
+    // ── Reverb ────────────────────────────────────────────────────────────────
+    {
+        const float revWet = get("reverb_wet");
+        if (revWet > 0.001f) {
+            juce::dsp::Reverb::Parameters rp;
+            rp.roomSize   = get("reverb_room");
+            rp.damping    = get("reverb_damp");
+            rp.width      = get("reverb_width");
+            rp.wetLevel   = revWet;
+            rp.dryLevel   = 1.f - revWet * 0.5f;
+            rp.freezeMode = 0.f;
+            reverb_.setParameters(rp);
+            juce::dsp::AudioBlock<float>             revBlock(buf);
+            juce::dsp::ProcessContextReplacing<float> revCtx(revBlock);
+            reverb_.process(revCtx);
+        }
+    }
 }
 
 juce::AudioProcessorEditor* BombSynthAudioProcessor::createEditor() {

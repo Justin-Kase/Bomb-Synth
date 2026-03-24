@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <BinaryData.h>
 #include "ui/WavetableDisplay.h"
+#include "ui/EnvelopeDisplay.h"
 #include "presets/PresetManager.h"
 #include <array>
 
@@ -85,7 +86,8 @@ private:
 };
 
 // ─── Main Editor ─────────────────────────────────────────────────────────────
-class BombSynthAudioProcessorEditor : public juce::AudioProcessorEditor {
+class BombSynthAudioProcessorEditor : public juce::AudioProcessorEditor,
+                                      private juce::Timer {
 public:
     explicit BombSynthAudioProcessorEditor(BombSynthAudioProcessor&);
     ~BombSynthAudioProcessorEditor() override;
@@ -145,6 +147,41 @@ private:
     BKnob masterVolKnob_ { "VOLUME", BCol::accent };
     BKnob glideKnob_     { "GLIDE",  BCol::accent2 };
 
+    // ── Envelope displays (live ADSR visualisers) ─────────────────────────────
+    EnvelopeDisplay ampEnvDisplay_;
+    EnvelopeDisplay fEnvDisplay_;
+
+    // ── Tab bar ───────────────────────────────────────────────────────────────
+    enum class Tab { Synth, Effects };
+    Tab activeTab_ = Tab::Synth;
+    juce::TextButton synthTabBtn_   { "SYNTH"   };
+    juce::TextButton effectsTabBtn_ { "EFFECTS" };
+    void setTab(Tab t);
+    void setSynthVisible(bool v);
+    void setEffectsVisible(bool v);
+    void timerCallback() override;
+
+    // ── Effects sections ──────────────────────────────────────────────────────
+    static inline const juce::Colour kReverbCol  { 0xFF7986CB };
+    static inline const juce::Colour kDelayCol   { 0xFF4DB6AC };
+    static inline const juce::Colour kChorusCol  { 0xFFBA68C8 };
+
+    SectionPanel reverbSection_  { "REVERB",  kReverbCol };
+    BKnob revRoomKnob_  { "ROOM",     kReverbCol };
+    BKnob revDampKnob_  { "DAMP",     kReverbCol };
+    BKnob revWidthKnob_ { "WIDTH",    kReverbCol };
+    BKnob revWetKnob_   { "WET",      BCol::accent };
+
+    SectionPanel delaySection_   { "DELAY",   kDelayCol  };
+    BKnob delTimeKnob_  { "TIME",     kDelayCol  };
+    BKnob delFbKnob_    { "FEEDBACK", kDelayCol  };
+    BKnob delWetKnob_   { "WET",      BCol::accent };
+
+    SectionPanel chorusSection_  { "CHORUS",  kChorusCol };
+    BKnob choRateKnob_  { "RATE",     kChorusCol };
+    BKnob choDepthKnob_ { "DEPTH",    kChorusCol };
+    BKnob choWetKnob_   { "WET",      BCol::accent };
+
     // ── Preset browser (header bar) ───────────────────────────────────────────
     juce::ComboBox categoryCombo_;
     juce::ComboBox presetCombo_;
@@ -188,6 +225,10 @@ private:
     std::unique_ptr<IA> lfo2ShapeAtt_;
     // Master
     std::unique_ptr<SA> masterVolAtt_, glideAtt_;
+    // Effects
+    std::unique_ptr<SA> revRoomAtt_, revDampAtt_, revWidthAtt_, revWetAtt_;
+    std::unique_ptr<SA> delTimeAtt_, delFbAtt_,   delWetAtt_;
+    std::unique_ptr<SA> choRateAtt_, choDepthAtt_, choWetAtt_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BombSynthAudioProcessorEditor)
 };
