@@ -136,18 +136,32 @@ void OscStrip::sliderValueChanged(juce::Slider* s) {
 }
 
 void OscStrip::paint(juce::Graphics& g) {
-    // OSC index label drawn on the left
-    juce::Colour labelCol = BCol::accent2;
-    g.setFont(juce::Font(10.5f, juce::Font::bold));
-    g.setColour(labelCol);
-    g.drawText("OSC " + juce::String(index_),
-               0, 0, kLabelW, getHeight(), juce::Justification::centred);
+    const int H = getHeight();
+    const juce::Colour labelCol = BCol::accent2;
 
-    // Subtle row divider
-    if (index_ < 3) {
-        g.setColour(BCol::border);
-        g.drawHorizontalLine(getHeight() - 1, 0.f, (float)getWidth());
-    }
+    // OSC badge — pill background
+    juce::Rectangle<float> badge(3.f, H * 0.25f, kLabelW - 6.f, H * 0.5f);
+    g.setColour(labelCol.withAlpha(0.12f));
+    g.fillRoundedRectangle(badge, 4.f);
+    g.setColour(labelCol.withAlpha(0.4f));
+    g.drawRoundedRectangle(badge, 4.f, 0.8f);
+
+    // "OSC" text
+    g.setFont(juce::Font(7.5f, juce::Font::bold));
+    g.setColour(labelCol.withAlpha(0.6f));
+    g.drawText("OSC", (int)badge.getX(), (int)badge.getY() + 2,
+               (int)badge.getWidth(), 10, juce::Justification::centred);
+
+    // Number
+    g.setFont(juce::Font(14.f, juce::Font::bold));
+    g.setColour(labelCol);
+    g.drawText(juce::String(index_), (int)badge.getX(),
+               (int)badge.getY() + 10, (int)badge.getWidth(),
+               (int)badge.getHeight() - 10, juce::Justification::centred);
+
+    // Row divider
+    g.setColour(BCol::border);
+    g.drawHorizontalLine(H - 1, 0.f, (float)getWidth());
 }
 
 void OscStrip::resized() {
@@ -364,9 +378,9 @@ void BombSynthAudioProcessorEditor::resized() {
     auto filterB = row2.removeFromLeft(filterW);
     filterSection_.setBounds(filterB);
     auto fc = filterSection_.getContentArea().translated(filterB.getX(), filterB.getY());
-    auto typeRow = fc.removeFromTop(32);
-    filterTypeLabel_.setBounds(typeRow.removeFromLeft(44));
-    filterTypeBox_  .setBounds(typeRow.withTrimmedRight(4));
+    auto typeRow = fc.removeFromTop(36);
+    filterTypeLabel_.setBounds(typeRow.removeFromTop(14));
+    filterTypeBox_  .setBounds(typeRow.withTrimmedRight(4).withTrimmedLeft(4));
     const int fkW = fc.getWidth() / 4;
     for (auto* k : { &cutoffKnob_, &resKnob_, &driveKnob_, &envAmtKnob_ })
         k->setBounds(fc.removeFromLeft(fkW));
@@ -401,9 +415,9 @@ void BombSynthAudioProcessorEditor::resized() {
     auto lfo1B = row3.removeFromLeft(lfoW);
     lfo1Section_.setBounds(lfo1B);
     auto l1c = lfo1Section_.getContentArea().translated(lfo1B.getX(), lfo1B.getY());
-    auto l1top = l1c.removeFromTop(34);
-    lfo1ShapeLabel_.setBounds(l1top.removeFromLeft(44));
-    lfo1ShapeBox_  .setBounds(l1top.withTrimmedRight(4));
+    auto l1top = l1c.removeFromTop(38);
+    lfo1ShapeLabel_.setBounds(l1top.removeFromTop(14));
+    lfo1ShapeBox_  .setBounds(l1top.withTrimmedRight(4).withTrimmedLeft(4));
     const int l1kW = l1c.getWidth() / 3;
     for (auto* k : { &lfo1RateKnob_, &lfo1DepthKnob_, &lfo1PhaseKnob_ })
         k->setBounds(l1c.removeFromLeft(l1kW));
@@ -414,9 +428,9 @@ void BombSynthAudioProcessorEditor::resized() {
     auto lfo2B = row3.removeFromLeft(lfoW);
     lfo2Section_.setBounds(lfo2B);
     auto l2c = lfo2Section_.getContentArea().translated(lfo2B.getX(), lfo2B.getY());
-    auto l2top = l2c.removeFromTop(34);
-    lfo2ShapeLabel_.setBounds(l2top.removeFromLeft(44));
-    lfo2ShapeBox_  .setBounds(l2top.withTrimmedRight(4));
+    auto l2top = l2c.removeFromTop(38);
+    lfo2ShapeLabel_.setBounds(l2top.removeFromTop(14));
+    lfo2ShapeBox_  .setBounds(l2top.withTrimmedRight(4).withTrimmedLeft(4));
     const int l2kW = l2c.getWidth() / 2;
     for (auto* k : { &lfo2RateKnob_, &lfo2DepthKnob_ })
         k->setBounds(l2c.removeFromLeft(l2kW));

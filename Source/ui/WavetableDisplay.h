@@ -38,7 +38,8 @@ private:
 
     juce::Path buildWaveformPath(const juce::Rectangle<float>& area) const;
 
-    static constexpr int kNavW = 18;   // px width of each arrow region
-    static constexpr int kBarH = 20;   // px height of bottom nav bar
-    static constexpr int kDotRow = 6;  // px height of frame-dot row
+    static constexpr int kNavW    = 18;  // px width of each arrow region
+    static constexpr int kBarH    = 20;  // px height of bottom nav bar
+    static constexpr int kDotRow  =  6;  // px height of frame-dot row
+    static constexpr int kHdrH    = 14;  // px height of top "WAVEFORM" label
 };

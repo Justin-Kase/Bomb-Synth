@@ -52,9 +52,19 @@ void WavetableDisplay::paint(juce::Graphics& g) {
     g.setColour(bankCol.withAlpha(0.5f));
     g.drawRoundedRectangle(0.5f, 0.5f, W - 1.f, H - 1.f, 6.f, 1.f);
 
+    // ── Header label: "WAVEFORM" ─────────────────────────────────────────────
+    g.setFont(juce::Font(8.5f, juce::Font::bold));
+    g.setColour(bankCol.withAlpha(0.5f));
+    g.drawText("WAVEFORM", 0, 0, W, kHdrH, juce::Justification::centred);
+
+    // Subtle separator under header
+    g.setColour(bankCol.withAlpha(0.12f));
+    g.drawHorizontalLine(kHdrH, 2.f, (float)(W - 2));
+
     // ── Waveform area ─────────────────────────────────────────────────────────
     const float dotRowY = H - kBarH - kDotRow;
-    const juce::Rectangle<float> waveArea {4.f, 4.f, (float)(W - 8), dotRowY - 4.f};
+    const juce::Rectangle<float> waveArea {4.f, (float)kHdrH + 2.f,
+                                            (float)(W - 8), dotRowY - (float)kHdrH - 4.f};
 
     // Subtle center line
     g.setColour(juce::Colour(0xFF1A2030));
