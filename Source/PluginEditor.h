@@ -156,6 +156,17 @@ private:
     void populatePresetCombo(const juce::String& category);
     void applyPreset(int idx);
     void syncDisplaysToParams();
+    void loadWavetableForOsc(int oscIdx);
+
+    std::unique_ptr<juce::FileChooser> fileChooser_;
+
+    // Cycling palette for user bank colours
+    static constexpr uint32_t kUserColours[] = {
+        0xFFE040FB, 0xFF00BCD4, 0xFF8BC34A, 0xFFFF5722,
+        0xFF607D8B, 0xFFFF4081, 0xFF69F0AE, 0xFFFF6D00,
+        0xFF40C4FF, 0xFFFFD740, 0xFFB0BEC5, 0xFFEA80FC,
+    };
+    int userColourIdx_ = 0;
 
     using SA = juce::AudioProcessorValueTreeState::SliderAttachment;
     using IA = juce::AudioProcessorValueTreeState::ComboBoxAttachment;

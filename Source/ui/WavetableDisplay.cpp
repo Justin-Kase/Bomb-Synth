@@ -7,7 +7,8 @@ WavetableDisplay::WavetableDisplay() {
 }
 
 void WavetableDisplay::setBankIndex(int idx) {
-    bankIdx_ = juce::jlimit(0, kWTBanks - 1, idx);
+    int nBanks = WavetableBankLibrary::get().numBanks();
+    bankIdx_ = juce::jlimit(0, nBanks - 1, idx);
     repaint();
 }
 
@@ -52,10 +53,35 @@ void WavetableDisplay::paint(juce::Graphics& g) {
     g.setColour(bankCol.withAlpha(0.5f));
     g.drawRoundedRectangle(0.5f, 0.5f, W - 1.f, H - 1.f, 6.f, 1.f);
 
-    // ── Header label: "WAVEFORM" ─────────────────────────────────────────────
+    // ── Header: "WAVEFORM" label + load button ────────────────────────────────
     g.setFont(juce::Font(8.5f, juce::Font::bold));
     g.setColour(bankCol.withAlpha(0.5f));
-    g.drawText("WAVEFORM", 0, 0, W, kHdrH, juce::Justification::centred);
+    g.drawText("WAVEFORM", 0, 0, W - kLoadW, kHdrH, juce::Justification::centred);
+
+    // Load button (top-right corner of header bar)
+    {
+        juce::Colour lc = hoverLoad_
+            ? bankCol.brighter(0.5f)
+            : bankCol.withAlpha(0.35f);
+
+        // Hover: fill background
+        if (hoverLoad_) {
+            g.setColour(bankCol.withAlpha(0.15f));
+            g.fillRect(W - kLoadW, 0, kLoadW, kHdrH);
+        }
+
+        // Draw a small folder/upload icon (upward arrow over a line)
+        const float bx = W - kLoadW + kLoadW * 0.5f;
+        const float by = kHdrH * 0.5f;
+        g.setColour(lc);
+        juce::Path arrow;
+        arrow.addTriangle(bx - 3.5f, by + 1.f,
+                          bx + 3.5f, by + 1.f,
+                          bx,        by - 3.f);
+        g.fillPath(arrow);
+        g.fillRect(bx - 1.f, by + 1.f, 2.f, 3.f);        // stem
+        g.fillRect(bx - 4.f, by + 4.f, 8.f, 1.2f);       // base line
+    }
 
     // Subtle separator under header
     g.setColour(bankCol.withAlpha(0.12f));
@@ -150,9 +176,9 @@ void WavetableDisplay::paint(juce::Graphics& g) {
                kNavW, (int)barY, W - kNavW * 2, kBarH,
                juce::Justification::centred);
 
-    // Bank index indicator  (tiny dots below name — which bank out of 6)
+    // Bank index indicator (tiny dots — one per bank, capped at 16 for space)
     const float bDotR = 2.f, bDotGap = 2.f;
-    const int   nb     = lib.numBanks();
+    const int   nb     = juce::jmin(lib.numBanks(), 16);
     float bDotTotalW   = nb * (bDotR * 2 + bDotGap) - bDotGap;
     float bDotX        = (W - bDotTotalW) * 0.5f;
     // draw at very bottom inside bar
@@ -166,22 +192,33 @@ void WavetableDisplay::paint(juce::Graphics& g) {
 
 // ── Mouse handling ────────────────────────────────────────────────────────────
 void WavetableDisplay::mouseMove(const juce::MouseEvent& e) {
-    const int H = getHeight();
-    bool wasL = hoverL_, wasR = hoverR_;
-    hoverL_ = (e.x < kNavW && e.y >= H - kBarH);
-    hoverR_ = (e.x >= getWidth() - kNavW && e.y >= H - kBarH);
-    if (hoverL_ != wasL || hoverR_ != wasR) repaint();
+    const int H  = getHeight();
+    const int W  = getWidth();
+    bool wasL    = hoverL_, wasR = hoverR_, wasLd = hoverLoad_;
+    hoverL_    = (e.x < kNavW    && e.y >= H - kBarH);
+    hoverR_    = (e.x >= W - kNavW && e.y >= H - kBarH);
+    hoverLoad_ = (e.x >= W - kLoadW && e.y < kHdrH);
+    if (hoverL_ != wasL || hoverR_ != wasR || hoverLoad_ != wasLd) repaint();
 }
 
 void WavetableDisplay::mouseDown(const juce::MouseEvent& e) {
-    const int H = getHeight();
-    if (e.y < H - kBarH) return;
+    const int H  = getHeight();
+    const int W  = getWidth();
 
+    // Load button (top-right header corner)
+    if (e.y < kHdrH && e.x >= W - kLoadW) {
+        if (onLoadWavetable) onLoadWavetable();
+        return;
+    }
+
+    if (e.y < H - kBarH) return;   // ignore waveform area clicks
+
+    const int nBanks = WavetableBankLibrary::get().numBanks();
     int newIdx = bankIdx_;
     if (e.x < kNavW)
-        newIdx = (bankIdx_ - 1 + kWTBanks) % kWTBanks;
-    else if (e.x >= getWidth() - kNavW)
-        newIdx = (bankIdx_ + 1) % kWTBanks;
+        newIdx = (bankIdx_ - 1 + nBanks) % nBanks;
+    else if (e.x >= W - kNavW)
+        newIdx = (bankIdx_ + 1) % nBanks;
 
     if (newIdx != bankIdx_) {
         bankIdx_ = newIdx;
@@ -191,6 +228,6 @@ void WavetableDisplay::mouseDown(const juce::MouseEvent& e) {
 }
 
 void WavetableDisplay::mouseExit(const juce::MouseEvent&) {
-    hoverL_ = hoverR_ = false;
+    hoverL_ = hoverR_ = hoverLoad_ = false;
     repaint();
 }

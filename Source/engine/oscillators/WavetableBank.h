@@ -28,6 +28,8 @@ struct WavetableFrame {
 struct WavetableBank {
     juce::String  name;
     uint32_t      colourArgb { 0xFF4FC3F7 };   // ARGB — avoids juce_graphics dep
+    bool          isUser     { false };
+    juce::String  filePath;                     // set for user-loaded banks
     std::array<WavetableFrame, kWTFrames> frames;
 
     inline float getSample(float phase01, float morph01) const noexcept {
@@ -48,14 +50,66 @@ public:
         return inst;
     }
 
-    int numBanks() const { return (int)banks_.size(); }
+    int numBanks()        const { return (int)banks_.size(); }
+    int numBuiltinBanks() const { return kWTBanks; }
 
     const WavetableBank& bank(int idx) const {
         return banks_[juce::jlimit(0, (int)banks_.size() - 1, idx)];
     }
 
+    // ── Load a wavetable from raw mono float samples ───────────────────────────
+    //  Slices totalSamples into kWTFrames equal segments, resampling each to
+    //  kWTSize via linear interpolation.  Returns the new bank index, or -1 on
+    //  error.  Thread-safe: banks_ is pre-reserved so no reallocation occurs.
+    int addUserBank(const juce::String& name, uint32_t colourArgb,
+                    const float* rawSamples, int totalSamples,
+                    const juce::String& filePath = {}) {
+        if (!rawSamples || totalSamples < 2) return -1;
+
+        // Normalise source
+        float peak = 0.f;
+        for (int i = 0; i < totalSamples; ++i) peak = std::max(peak, std::abs(rawSamples[i]));
+        const float gain = (peak > 1e-6f) ? 1.f / peak : 1.f;
+
+        WavetableBank b;
+        b.name       = name;
+        b.colourArgb = colourArgb;
+        b.isUser     = true;
+        b.filePath   = filePath;
+
+        for (int fr = 0; fr < kWTFrames; ++fr) {
+            // Determine source segment for this frame
+            int startSmp, segLen;
+            if (totalSamples <= kWTSize) {
+                // Single-cycle: use the whole buffer for every frame
+                startSmp = 0;
+                segLen   = totalSamples;
+            } else {
+                startSmp = (int)((long long)fr       * totalSamples / kWTFrames);
+                int end  = (int)((long long)(fr + 1) * totalSamples / kWTFrames);
+                segLen   = std::max(1, end - startSmp);
+            }
+
+            auto& frame = b.frames[fr];
+            for (int i = 0; i < kWTSize; ++i) {
+                float pos = (float)i * segLen / kWTSize;
+                int   s0  = (int)pos % segLen;
+                int   s1  = (s0 + 1) % segLen;
+                float t   = pos - (float)(int)pos;
+                frame.data[i] = gain * (rawSamples[startSmp + s0] * (1.f - t)
+                                      + rawSamples[startSmp + s1] * t);
+            }
+        }
+
+        // Pre-reserved — push_back won't reallocate, safe from audio thread
+        juce::ScopedLock sl(addLock_);
+        banks_.push_back(std::move(b));
+        return (int)banks_.size() - 1;
+    }
+
 private:
     std::vector<WavetableBank> banks_;
+    juce::CriticalSection     addLock_;  // guards addUserBank only
 
     // ── Helpers ────────────────────────────────────────────────────────────────
     static void normalize(WavetableFrame& f) {
@@ -285,7 +339,7 @@ private:
 
     // ── Constructor ────────────────────────────────────────────────────────────
     WavetableBankLibrary() {
-        banks_.reserve(kWTBanks);
+        banks_.reserve(32);  // pre-allocate — prevents reallocation when user banks are added
         banks_.push_back(makeAnalog());
         banks_.push_back(makeDigital());
         banks_.push_back(makeVocal());

@@ -46,6 +46,7 @@ target_link_libraries(BombSynth
         BombSynthBinaryData
         juce::juce_audio_utils
         juce::juce_audio_processors
+        juce::juce_audio_formats
         juce::juce_dsp
         juce::juce_gui_extra
         juce::juce_opengl

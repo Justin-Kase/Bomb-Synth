@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <cmath>
 
 // ─── BombLookAndFeel ──────────────────────────────────────────────────────────
@@ -233,6 +234,11 @@ BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProce
             }
         };
 
+        const int oscI = i;
+        oscs_[i].display.onLoadWavetable = [this, oscI] {
+            loadWavetableForOsc(oscI);
+        };
+
         addAndMakeVisible(oscs_[i]);
     }
 
@@ -398,6 +404,51 @@ void BombSynthAudioProcessorEditor::applyPreset(int idx) {
 
     // Update WavetableDisplay bank selections from newly loaded params
     syncDisplaysToParams();
+}
+
+void BombSynthAudioProcessorEditor::loadWavetableForOsc(int oscIdx) {
+    fileChooser_ = std::make_unique<juce::FileChooser>(
+        "Load Wavetable (WAV / AIFF)",
+        juce::File::getSpecialLocation(juce::File::userHomeDirectory),
+        "*.wav;*.aif;*.aiff");
+
+    fileChooser_->launchAsync(
+        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+        [this, oscIdx](const juce::FileChooser& fc) {
+            static const char* bankIds[] = { "osc1_wave", "osc2_wave", "osc3_wave" };
+            auto f = fc.getResult();
+            if (!f.existsAsFile()) return;
+
+            // Read audio into a mono float buffer
+            juce::AudioFormatManager mgr;
+            mgr.registerBasicFormats();
+            std::unique_ptr<juce::AudioFormatReader> reader(mgr.createReaderFor(f));
+            if (!reader) return;
+
+            const int total = (int)reader->lengthInSamples;
+            if (total < 2) return;
+
+            juce::AudioBuffer<float> buf(1, total);
+            reader->read(&buf, 0, total, 0, true, true);  // downmix stereo → mono
+
+            // Pick a colour from the cycling palette
+            uint32_t col = kUserColours[userColourIdx_++ % juce::numElementsInArray(kUserColours)];
+
+            int bankIdx = WavetableBankLibrary::get().addUserBank(
+                f.getFileNameWithoutExtension(), col,
+                buf.getReadPointer(0), total,
+                f.getFullPathName());
+
+            if (bankIdx < 0) return;   // error
+
+            // Set param & display
+            if (auto* param = proc_.parameters().getParameter(bankIds[oscIdx])) {
+                auto* rp = dynamic_cast<juce::RangedAudioParameter*>(param);
+                if (rp) param->setValueNotifyingHost(
+                    rp->getNormalisableRange().convertTo0to1((float)bankIdx));
+            }
+            oscs_[oscIdx].display.setBankIndex(bankIdx);
+        });
 }
 
 void BombSynthAudioProcessorEditor::syncDisplaysToParams() {

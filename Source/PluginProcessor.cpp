@@ -14,7 +14,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout BombSynthAudioProcessor::cre
     for (int i = 1; i <= 3; ++i) {
         juce::String n(i);
         // bank index: 0-5 (replaces old 0-4 wave selector)
-        p.push_back(std::make_unique<juce::AudioParameterInt>  ("osc"+n+"_wave",  "OSC "+n+" Bank",  0, kWTBanks - 1, 0));
+        p.push_back(std::make_unique<juce::AudioParameterInt>  ("osc"+n+"_wave",  "OSC "+n+" Bank",  0, 31, 0));
         p.push_back(std::make_unique<juce::AudioParameterFloat>("osc"+n+"_morph", "OSC "+n+" Morph",
             juce::NormalisableRange<float>{0.f, 1.f}, 0.f));
         p.push_back(std::make_unique<juce::AudioParameterFloat>("osc"+n+"_tune",  "OSC "+n+" Tune",
