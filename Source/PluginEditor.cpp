@@ -324,10 +324,91 @@ BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProce
     addAndMakeVisible(masterSection_);
     addAndMakeVisible(masterVolKnob_);
     addAndMakeVisible(glideKnob_);
+
+    buildPresetBrowser();
 }
 
 BombSynthAudioProcessorEditor::~BombSynthAudioProcessorEditor() {
     setLookAndFeel(nullptr);
+}
+
+// ─── Preset browser helpers ───────────────────────────────────────────────────
+void BombSynthAudioProcessorEditor::buildPresetBrowser() {
+    // Category combo
+    categoryCombo_.clear(juce::dontSendNotification);
+    auto cats = PresetManager::categories();
+    for (int i = 0; i < cats.size(); ++i)
+        categoryCombo_.addItem(cats[i], i + 1);
+    categoryCombo_.setSelectedId(1, juce::dontSendNotification);
+
+    categoryCombo_.onChange = [this] {
+        populatePresetCombo(categoryCombo_.getText());
+    };
+    presetCombo_.onChange = [this] {
+        int idx = PresetManager::indexOf(categoryCombo_.getText(), presetCombo_.getText());
+        applyPreset(idx);
+    };
+    prevBtn_.onClick = [this] {
+        applyPreset(PresetManager::prev(currentPresetIdx_));
+    };
+    nextBtn_.onClick = [this] {
+        applyPreset(PresetManager::next(currentPresetIdx_));
+    };
+
+    addAndMakeVisible(categoryCombo_);
+    addAndMakeVisible(presetCombo_);
+    addAndMakeVisible(prevBtn_);
+    addAndMakeVisible(nextBtn_);
+
+    populatePresetCombo(cats[0]);
+
+    // Style
+    for (auto* c : { &categoryCombo_, &presetCombo_ }) {
+        c->setColour(juce::ComboBox::backgroundColourId, BCol::knobBg);
+        c->setColour(juce::ComboBox::textColourId, BCol::text);
+        c->setColour(juce::ComboBox::outlineColourId, BCol::accent.withAlpha(0.4f));
+        c->setColour(juce::ComboBox::arrowColourId, BCol::accent);
+        c->setColour(juce::PopupMenu::backgroundColourId, BCol::panel);
+        c->setColour(juce::PopupMenu::textColourId, BCol::text);
+    }
+    for (auto* b : { &prevBtn_, &nextBtn_ }) {
+        b->setColour(juce::TextButton::buttonColourId,   BCol::knobBg);
+        b->setColour(juce::TextButton::textColourOffId,  BCol::accent);
+        b->setColour(juce::ComboBox::outlineColourId,    BCol::accent.withAlpha(0.4f));
+    }
+}
+
+void BombSynthAudioProcessorEditor::populatePresetCombo(const juce::String& category) {
+    presetCombo_.clear(juce::dontSendNotification);
+    auto names = PresetManager::presetsInCategory(category);
+    for (int i = 0; i < names.size(); ++i)
+        presetCombo_.addItem(names[i], i + 1);
+    presetCombo_.setSelectedItemIndex(0, juce::dontSendNotification);
+}
+
+void BombSynthAudioProcessorEditor::applyPreset(int idx) {
+    currentPresetIdx_ = idx;
+    PresetManager::apply(idx, proc_.parameters());
+
+    // Sync combo selections to loaded preset
+    const auto& preset = PresetManager::all()[idx];
+    categoryCombo_.setText(preset.category, juce::dontSendNotification);
+    populatePresetCombo(preset.category);
+    presetCombo_.setText(preset.name, juce::dontSendNotification);
+
+    // Update WavetableDisplay bank selections from newly loaded params
+    syncDisplaysToParams();
+}
+
+void BombSynthAudioProcessorEditor::syncDisplaysToParams() {
+    static const char* bankIds[3] = {"osc1_wave","osc2_wave","osc3_wave"};
+    static const char* morphIds[3] = {"osc1_morph","osc2_morph","osc3_morph"};
+    for (int i = 0; i < 3; ++i) {
+        int bank  = (int)proc_.parameters().getRawParameterValue(bankIds[i])->load();
+        float mor =       proc_.parameters().getRawParameterValue(morphIds[i])->load();
+        oscs_[i].display.setBankIndex(bank);
+        oscs_[i].display.setMorphPos(mor);
+    }
 }
 
 void BombSynthAudioProcessorEditor::paint(juce::Graphics& g) {
@@ -352,15 +433,37 @@ void BombSynthAudioProcessorEditor::paint(juce::Graphics& g) {
 
     g.setFont(juce::Font(10.f));
     g.setColour(BCol::textDim);
-    g.drawText("Hybrid Synthesizer  |  v0.2.0  |  Illbomb",
-               14, 0, getWidth() - 60, hH, juce::Justification::centredRight);
+    g.drawText("v0.2.0  |  Illbomb", getWidth() - 200, 0, 140, hH,
+               juce::Justification::centredRight);
 }
 
 void BombSynthAudioProcessorEditor::resized() {
     const int hH  = 50;
     const int pad = 8;
+    const int W   = getWidth();
+
+    // ── Preset browser (inside header bar) ───────────────────────────────────
+    {
+        const int catW  = 90;
+        const int preW  = 190;
+        const int btnW  = 26;
+        const int gap   = 5;
+        const int barH  = 26;
+        const int barY  = (hH - barH) / 2;
+        // Centred in the middle of the header
+        int totalW = catW + gap + preW + gap + btnW + gap + btnW;
+        int startX = (W - totalW) / 2;
+        categoryCombo_.setBounds(startX, barY, catW, barH);
+        startX += catW + gap;
+        presetCombo_   .setBounds(startX, barY, preW, barH);
+        startX += preW + gap;
+        prevBtn_       .setBounds(startX, barY, btnW, barH);
+        startX += btnW + gap;
+        nextBtn_       .setBounds(startX, barY, btnW, barH);
+    }
+
     auto area = getLocalBounds().withTrimmedTop(hH).reduced(pad);
-    const int W = area.getWidth();
+    const int aW = area.getWidth(); (void)aW;
 
     // ── Row 1: Oscillators ────────────────────────────────────────────────────
     auto row1 = area.removeFromTop(220);
@@ -376,7 +479,7 @@ void BombSynthAudioProcessorEditor::resized() {
     auto row2 = area.removeFromTop(165);
 
     // Filter (27%)
-    int filterW = (int)(W * 0.27f);
+    int filterW = (int)(area.getWidth() * 0.27f);
     auto filterB = row2.removeFromLeft(filterW);
     filterSection_.setBounds(filterB);
     auto fc = filterSection_.getContentArea().translated(filterB.getX(), filterB.getY());
@@ -390,7 +493,7 @@ void BombSynthAudioProcessorEditor::resized() {
     row2.removeFromLeft(pad);
 
     // Amp env (36%)
-    int ampW = (int)(W * 0.355f);
+    int ampW = (int)(area.getWidth() * 0.355f);
     auto ampB = row2.removeFromLeft(ampW);
     ampEnvSection_.setBounds(ampB);
     auto ac = ampEnvSection_.getContentArea().translated(ampB.getX(), ampB.getY());
@@ -411,7 +514,7 @@ void BombSynthAudioProcessorEditor::resized() {
 
     // ── Row 3: LFO 1  |  LFO 2  |  Master ────────────────────────────────────
     auto row3 = area.removeFromTop(145);
-    const int lfoW = (int)(W * 0.37f);
+    const int lfoW = (int)(area.getWidth() * 0.37f);
 
     // LFO 1
     auto lfo1B = row3.removeFromLeft(lfoW);

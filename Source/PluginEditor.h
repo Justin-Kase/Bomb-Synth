@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <BinaryData.h>
 #include "ui/WavetableDisplay.h"
+#include "presets/PresetManager.h"
 #include <array>
 
 class BombSynthAudioProcessor;
@@ -143,6 +144,18 @@ private:
     SectionPanel masterSection_ { "MASTER", BCol::textDim };
     BKnob masterVolKnob_ { "VOLUME", BCol::accent };
     BKnob glideKnob_     { "GLIDE",  BCol::accent2 };
+
+    // ── Preset browser (header bar) ───────────────────────────────────────────
+    juce::ComboBox categoryCombo_;
+    juce::ComboBox presetCombo_;
+    juce::TextButton prevBtn_ { "<" };
+    juce::TextButton nextBtn_ { ">" };
+    int currentPresetIdx_ = 0;
+
+    void buildPresetBrowser();
+    void populatePresetCombo(const juce::String& category);
+    void applyPreset(int idx);
+    void syncDisplaysToParams();
 
     using SA = juce::AudioProcessorValueTreeState::SliderAttachment;
     using IA = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
