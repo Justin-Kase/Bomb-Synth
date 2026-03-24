@@ -198,6 +198,9 @@ BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProce
 
     auto& par = proc_.parameters();
 
+    // ── OSC section panel first so strips render on top ──────────────────────
+    addAndMakeVisible(oscSection_);
+
     // ── OSC attachments + display callbacks ──────────────────────────────────
     static const char* morphIds[3]  = {"osc1_morph","osc2_morph","osc3_morph"};
     static const char* tuneIds[3]   = {"osc1_tune", "osc2_tune", "osc3_tune" };
@@ -232,7 +235,6 @@ BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProce
 
         addAndMakeVisible(oscs_[i]);
     }
-    addAndMakeVisible(oscSection_);
 
     // ── Filter ───────────────────────────────────────────────────────────────
     for (auto& item : { std::pair<int,const char*>{1,"Ladder LP24"}, {2,"Ladder LP12"},
