@@ -1,4 +1,0 @@
-# Hashes of file build rules.
-69ac89ec91bccab5b34bf7d080511de4 Source/BombSynth_artefacts/JuceLibraryCode/BombSynth_AU/PkgInfo
-32a22e59ec0da3955af8906fe49391e9 Source/BombSynth_artefacts/JuceLibraryCode/BombSynth_VST3/PkgInfo
-6f8b66e6c7b95abde29390e60bec912e Source/juce_binarydata_BombSynthBinaryData/JuceLibraryCode/BinaryData1.cpp

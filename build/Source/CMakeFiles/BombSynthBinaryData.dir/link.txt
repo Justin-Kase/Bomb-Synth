@@ -1,2 +1,0 @@
-/usr/bin/ar qc libBombSynthBinaryData.a CMakeFiles/BombSynthBinaryData.dir/juce_binarydata_BombSynthBinaryData/JuceLibraryCode/BinaryData1.cpp.o
-/usr/bin/ranlib libBombSynthBinaryData.a
