@@ -8,6 +8,8 @@ void Voice::prepare(double sr, int blockSize) {
     for (auto& o : wavetableOscs_) o.prepare(sr);
     ladderFilter_.prepare(sr, blockSize);
     svfFilter_.prepare(sr);
+    formantFilter_.prepare(sr);
+    combFilter_.prepare(sr);
     ampEnv_.prepare(sr);
     filterEnv_.prepare(sr);
     oscBuf_.setSize(1, blockSize);
@@ -24,7 +26,7 @@ void Voice::noteOn(int midiNote, float velocity) {
     midiNote_ = midiNote;
     velocity_ = velocity;
     for (int i = 0; i < kNumOscs; ++i) {
-        float hz = midiNoteToHz(midiNote, oscTune_[i]);
+        float hz = midiNoteToHz(midiNote, oscTune_[i] + modPitch_);
         analogOscs_[i].setFrequency(hz);
         wavetableOscs_[i].setFrequency(hz);
     }
@@ -40,6 +42,8 @@ void Voice::noteOff() {
 void Voice::reset() {
     for (auto& o : analogOscs_)    o.reset();
     for (auto& o : wavetableOscs_) o.reset();
+    formantFilter_.reset();
+    combFilter_.reset();
     ampEnv_.reset();
     filterEnv_.reset();
 }
@@ -52,14 +56,17 @@ void Voice::setOscEngine(int idx, OscEngineType t) {
 
 void Voice::setOscBankIndex(int oscIdx, int bankIdx) {
     if (oscIdx < 0 || oscIdx >= kNumOscs) return;
-    if (oscBanks_[oscIdx] == bankIdx)     return;   // no change
+    if (oscBanks_[oscIdx] == bankIdx)     return;
     oscBanks_[oscIdx] = bankIdx;
     wavetableOscs_[oscIdx].setBankIndex(bankIdx);
 }
 
 void Voice::setOscMorphPos(int oscIdx, float morph01) {
-    if (oscIdx >= 0 && oscIdx < kNumOscs)
+    if (oscIdx >= 0 && oscIdx < kNumOscs) {
+        baseMorph_[oscIdx] = morph01;
+        // Apply will happen in renderBlock with mod applied
         wavetableOscs_[oscIdx].setMorphPosition(morph01);
+    }
 }
 
 void Voice::setOscLevel(int oscIdx, float level) {
@@ -74,7 +81,7 @@ void Voice::setOscTune(int oscIdx, float semitones) {
     if (oscIdx >= 0 && oscIdx < kNumOscs) {
         oscTune_[oscIdx] = semitones;
         if (isActive()) {
-            float hz = midiNoteToHz(midiNote_, semitones);
+            float hz = midiNoteToHz(midiNote_, semitones + modPitch_);
             analogOscs_[oscIdx].setFrequency(hz);
             wavetableOscs_[oscIdx].setFrequency(hz);
         }
@@ -83,6 +90,31 @@ void Voice::setOscTune(int oscIdx, float semitones) {
 
 void Voice::renderBlock(juce::AudioBuffer<float>& buffer, int startSample, int numSamples) {
     if (!isActive()) return;
+
+    // Apply modulation: pitch and morph offsets each block
+    for (int i = 0; i < kNumOscs; ++i) {
+        float hz = midiNoteToHz(midiNote_, oscTune_[i] + modPitch_);
+        analogOscs_[i].setFrequency(hz);
+        wavetableOscs_[i].setFrequency(hz);
+        float morphMod = juce::jlimit(0.f, 1.f, baseMorph_[i] + modMorph_[i]);
+        wavetableOscs_[i].setMorphPosition(morphMod);
+    }
+
+    // Configure filter based on type
+    switch (filterType_) {
+        case 0: ladderFilter_.setMode(LadderMode::LP24); break;
+        case 1: ladderFilter_.setMode(LadderMode::LP12); break;
+        case 2: ladderFilter_.setMode(LadderMode::HP24); break;
+        case 3: svfFilter_.setMode(SVFMode::LP);         break;
+        case 4: // Formant: resonance controls vowel
+            formantFilter_.setVowel(juce::jlimit(0, 4, (int)(baseResonance_ * 4.99f)));
+            break;
+        case 5: // Comb
+            combFilter_.setCutoff(baseCutoff_);
+            combFilter_.setResonance(baseResonance_);
+            break;
+        default: break;
+    }
 
     oscBuf_.setSize(1, numSamples, false, false, true);
     oscBuf_.clear();
@@ -110,21 +142,29 @@ void Voice::renderBlock(juce::AudioBuffer<float>& buffer, int startSample, int n
 
     juce::FloatVectorOperations::multiply(mono, normGain, numSamples);
 
-    // Filter
-    if (filterRouting_ == FilterRouting::Serial) {
-        ladderFilter_.processBlock(mono, numSamples);
-    } else {
-        std::vector<float> ladderOut(mono, mono + numSamples);
-        std::vector<float> svfOut   (mono, mono + numSamples);
-        ladderFilter_.processBlock(ladderOut.data(), numSamples);
-        svfFilter_   .processBlock(svfOut   .data(), numSamples);
-        for (int s = 0; s < numSamples; ++s)
-            mono[s] = ladderOut[s] * 0.5f + svfOut[s] * 0.5f;
+    // Filter routing
+    switch (filterType_) {
+        case 0: case 1: case 2:  // Ladder
+            ladderFilter_.processBlock(mono, numSamples);
+            break;
+        case 3:                  // SVF LP
+            svfFilter_.processBlock(mono, numSamples);
+            break;
+        case 4:                  // Formant
+            formantFilter_.processBlock(mono, numSamples);
+            break;
+        case 5:                  // Comb
+            combFilter_.processBlock(mono, numSamples);
+            break;
+        default:
+            ladderFilter_.processBlock(mono, numSamples);
+            break;
     }
 
-    // Amp envelope
+    // Amp envelope + velocity + gain + mod amp
+    const float modAmpMult = juce::jmax(0.f, 1.f + modAmp_);
     for (int s = 0; s < numSamples; ++s)
-        mono[s] *= ampEnv_.process() * velocity_ * gain_;
+        mono[s] *= ampEnv_.process() * velocity_ * gain_ * modAmpMult;
 
     // Stereo pan (constant power)
     float angle = (pan_ + 1.f) * 0.5f * 1.57079632f;

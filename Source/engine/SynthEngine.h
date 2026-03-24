@@ -17,12 +17,21 @@ public:
     void setCutoff(float hz);
     void setResonance(float r);
     void setMasterGain(float g) { masterGain_ = g; }
+    void setFilterType(int t);
 
     // Wavetable control — forwarded to all voices
     void setOscBankIndex(int oscIdx, int bankIdx);
     void setOscMorphPos (int oscIdx, float morph01);
     void setOscLevel    (int oscIdx, float level);
     void setOscTune     (int oscIdx, float semitones);
+
+    // Modulation pass-through — applied each processBlock
+    void setModCutoffHz     (float hz)  { modCutoffHz_        = hz; }
+    void setModPitchSemitones(float st) { modPitchSemitones_  = st; }
+    void setModAmp          (float amp) { modAmp_             = amp; }
+    void setModMorph        (int i, float v) {
+        if (i >= 0 && i < 3) modMorph_[i] = v;
+    }
 
 private:
     void handleNoteOn (int note, float vel);
@@ -33,8 +42,15 @@ private:
     double sampleRate_ = 44100.0;
     int    blockSize_  = 512;
     float  masterGain_ = 0.8f;
+    float  baseCutoff_ = 6000.f;
     ADSR::Params ampParams_;
     ADSR::Params filterParams_;
+
+    // Modulation state
+    float modCutoffHz_       = 0.f;
+    float modPitchSemitones_ = 0.f;
+    float modAmp_            = 0.f;
+    float modMorph_[3]       = {};
 
     std::array<Voice, kMaxVoices> voices_;
 };

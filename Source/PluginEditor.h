@@ -4,7 +4,9 @@
 #include <BinaryData.h>
 #include "ui/WavetableDisplay.h"
 #include "ui/EnvelopeDisplay.h"
+#include "ui/FilterDisplay.h"
 #include "ui/SequencerPanel.h"
+#include "ui/ModulationPanel.h"
 #include "presets/PresetManager.h"
 #include <array>
 
@@ -108,6 +110,7 @@ private:
     SectionPanel filterSection_  { "FILTER",  BCol::amber };
     juce::Label    filterTypeLabel_;
     juce::ComboBox filterTypeBox_;
+    FilterDisplay  filterDisplay_;
     BKnob cutoffKnob_ { "CUTOFF",    BCol::amber };
     BKnob resKnob_    { "RESONANCE", BCol::amber };
     BKnob driveKnob_  { "DRIVE",     BCol::accent };
@@ -153,16 +156,19 @@ private:
     EnvelopeDisplay fEnvDisplay_;
 
     // ── Tab bar ───────────────────────────────────────────────────────────────
-    enum class Tab { Synth, Effects, Sequencer };
+    enum class Tab { Synth, Effects, Modulation, Sequencer };
     Tab activeTab_ = Tab::Synth;
     juce::TextButton synthTabBtn_     { "SYNTH"     };
     juce::TextButton effectsTabBtn_   { "EFFECTS"   };
+    juce::TextButton modTabBtn_       { "MOD"       };
     juce::TextButton sequencerTabBtn_ { "SEQUENCER" };
 
-    SequencerPanel sequencerPanel_;
+    SequencerPanel  sequencerPanel_;
+    std::unique_ptr<ModulationPanel> modPanel_;
     void setTab(Tab t);
     void setSynthVisible(bool v);
     void setEffectsVisible(bool v);
+    void setModulationVisible(bool v);
     void setSequencerVisible(bool v);
     void timerCallback() override;
 
@@ -201,6 +207,7 @@ private:
     void loadWavetableForOsc(int oscIdx);
 
     std::unique_ptr<juce::FileChooser> fileChooser_;
+    std::vector<juce::File> userWavetableFiles_;
 
     // Cycling palette for user bank colours
     static constexpr uint32_t kUserColours[] = {

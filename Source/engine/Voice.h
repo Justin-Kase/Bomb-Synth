@@ -5,6 +5,8 @@
 #include "oscillators/GranularEngine.h"
 #include "filters/LadderFilter.h"
 #include "filters/SVFFilter.h"
+#include "filters/FormantFilter.h"
+#include "filters/CombFilter.h"
 #include "envelopes/ADSR.h"
 
 enum class OscEngineType { Analog, Wavetable, Granular };
@@ -26,9 +28,10 @@ public:
     void setOscEngine(int idx, OscEngineType t);
     void setAmpEnvParams(const ADSR::Params& p)    { ampEnv_.setParams(p); }
     void setFilterEnvParams(const ADSR::Params& p) { filterEnv_.setParams(p); }
-    void setCutoff(float hz)     { ladderFilter_.setCutoff(hz);  svfFilter_.setCutoff(hz); }
-    void setResonance(float r)   { ladderFilter_.setResonance(r); svfFilter_.setResonance(r); }
+    void setCutoff(float hz)     { baseCutoff_ = hz; ladderFilter_.setCutoff(hz); svfFilter_.setCutoff(hz); combFilter_.setCutoff(hz); }
+    void setResonance(float r)   { baseResonance_ = r; ladderFilter_.setResonance(r); svfFilter_.setResonance(r); }
     void setFilterRouting(FilterRouting r) { filterRouting_ = r; }
+    void setFilterType(int t)    { filterType_ = t; }
     void setPan(float pan)       { pan_ = pan; }
     void setGain(float g)        { gain_ = g; }
 
@@ -37,6 +40,13 @@ public:
     void setOscMorphPos  (int oscIdx, float morph01);
     void setOscLevel     (int oscIdx, float level);
     void setOscTune      (int oscIdx, float semitones);  // coarse detune
+
+    // Modulation inputs (applied each renderBlock)
+    void setModPitch(float semitones) { modPitch_ = semitones; }
+    void setModMorph(int osc, float delta) {
+        if (osc >= 0 && osc < kNumOscs) modMorph_[osc] = delta;
+    }
+    void setModAmp(float delta)       { modAmp_ = delta; }
 
     int   getMidiNote() const { return midiNote_; }
     float getVelocity() const { return velocity_; }
@@ -50,7 +60,16 @@ private:
     float  velocity_    = 1.f;
     float  pan_         = 0.f;
     float  gain_        = 1.f;
+    int    filterType_  = 0;          // 0=LadderLP24 1=LadderLP12 2=LadderHP 3=SVFLP 4=Formant 5=Comb
+    float  baseCutoff_     = 6000.f;
+    float  baseResonance_  = 0.f;
     FilterRouting filterRouting_ = FilterRouting::Serial;
+
+    // Modulation offsets (set each block by SynthEngine)
+    float modPitch_ = 0.f;
+    float modAmp_   = 0.f;
+    std::array<float, kNumOscs> modMorph_ { 0.f, 0.f, 0.f };
+    std::array<float, kNumOscs> baseMorph_ { 0.f, 0.f, 0.f };
 
     std::array<OscEngineType, kNumOscs> oscTypes_ {
         OscEngineType::Wavetable,
@@ -64,8 +83,10 @@ private:
     AnalogOscillator    analogOscs_[kNumOscs];
     WavetableOscillator wavetableOscs_[kNumOscs];
 
-    LadderFilter ladderFilter_;
-    SVFFilter    svfFilter_;
+    LadderFilter  ladderFilter_;
+    SVFFilter     svfFilter_;
+    FormantFilter formantFilter_;
+    CombFilter    combFilter_;
 
     ADSR ampEnv_;
     ADSR filterEnv_;

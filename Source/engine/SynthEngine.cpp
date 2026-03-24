@@ -18,11 +18,16 @@ void SynthEngine::setFilterEnvParams(const ADSR::Params& p) {
 }
 
 void SynthEngine::setCutoff(float hz) {
+    baseCutoff_ = hz;
     for (auto& v : voices_) v.setCutoff(hz);
 }
 
 void SynthEngine::setResonance(float r) {
     for (auto& v : voices_) v.setResonance(r);
+}
+
+void SynthEngine::setFilterType(int t) {
+    for (auto& v : voices_) v.setFilterType(t);
 }
 
 void SynthEngine::setOscBankIndex(int oscIdx, int bankIdx) {
@@ -54,7 +59,7 @@ void SynthEngine::handleNoteOn(int note, float vel) {
     Voice* v = findFreeVoice(note);
     if (!v) v = stealVoice(note);
     v->reset();
-    v->setCutoff(6000.f);
+    v->setCutoff(baseCutoff_);
     v->setResonance(0.f);
     v->setAmpEnvParams(ampParams_);
     v->setFilterEnvParams(filterParams_);
@@ -68,6 +73,17 @@ void SynthEngine::handleNoteOff(int note) {
 
 void SynthEngine::processBlock(juce::AudioBuffer<float>& audio, juce::MidiBuffer& midi) {
     audio.clear();
+
+    // Apply modulation offsets to all active voices before rendering
+    const float effectiveCutoff = juce::jmax(20.f, baseCutoff_ + modCutoffHz_);
+    for (auto& v : voices_) {
+        if (!v.isActive()) continue;
+        v.setCutoff(effectiveCutoff);
+        v.setModPitch(modPitchSemitones_);
+        v.setModAmp(modAmp_);
+        for (int i = 0; i < 3; ++i) v.setModMorph(i, modMorph_[i]);
+    }
+
     int numSamples = audio.getNumSamples(), pos = 0;
 
     for (auto meta : midi) {

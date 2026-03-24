@@ -2,6 +2,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include "engine/SynthEngine.h"
+#include "engine/LFOEngine.h"
 #include "engine/Sequencer.h"
 
 class BombSynthAudioProcessor : public juce::AudioProcessor {
@@ -38,6 +39,9 @@ public:
 
     juce::AudioProcessorValueTreeState& parameters() { return params_; }
 
+    // User wavetable persistence
+    void addUserWavetablePath(const juce::String& path);
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
 
@@ -45,6 +49,18 @@ private:
                                                   createParameters() };
     SynthEngine engine_;
     Sequencer   sequencer_;
+
+    // LFOs
+    LFOEngine lfo1_, lfo2_;
+
+    // Accumulated mod values (written in processBlock, read by engine)
+    float modCutoff_ = 0.f;
+    float modPitch_  = 0.f;
+    float modAmp_    = 0.f;
+    std::array<float, 3> modMorph_ { 0.f, 0.f, 0.f };
+
+    // Persisted user wavetable file paths
+    juce::StringArray userWavetablePaths_;
 
 public:
     Sequencer& sequencer() { return sequencer_; }
@@ -58,7 +74,7 @@ private:
     static constexpr int kMaxDelaySamples = 192000;
     std::array<std::vector<float>, 2> delayBuf_;
     int   delayWrite_  = 0;
-    float delaySmoothL_ = 0.f, delaySmoothR_ = 0.f;  // simple smoothed feedback accum
+    float delaySmoothL_ = 0.f, delaySmoothR_ = 0.f;
 
     double sampleRate_ = 44100.0;
 

@@ -190,6 +190,7 @@ BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProce
     : juce::AudioProcessorEditor(&p), proc_(p),
       sequencerPanel_(p.sequencer())
 {
+    modPanel_ = std::make_unique<ModulationPanel>(p.parameters());
     setLookAndFeel(&laf_);
     setSize(1100, 700);
     setResizable(true, true);
@@ -245,7 +246,7 @@ BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProce
 
     // ── Filter ───────────────────────────────────────────────────────────────
     for (auto& item : { std::pair<int,const char*>{1,"Ladder LP24"}, {2,"Ladder LP12"},
-                         {3,"Ladder HP24"}, {4,"SVF LP"}, {5,"SVF BP"} })
+                         {3,"Ladder HP"}, {4,"SVF LP"}, {5,"Formant"}, {6,"Comb"} })
         filterTypeBox_.addItem(item.second, item.first);
     filterTypeLabel_.setText("TYPE", juce::dontSendNotification);
     filterTypeLabel_.setFont(juce::Font(9.5f, juce::Font::bold));
@@ -261,6 +262,7 @@ BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProce
     addAndMakeVisible(filterSection_);
     addAndMakeVisible(filterTypeLabel_);
     addAndMakeVisible(filterTypeBox_);
+    addAndMakeVisible(filterDisplay_);
     for (auto* k : { &cutoffKnob_, &resKnob_, &driveKnob_, &envAmtKnob_ })
         addAndMakeVisible(k);
 
@@ -360,7 +362,7 @@ BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProce
     addAndMakeVisible(fEnvDisplay_);
 
     // ── Tab bar ───────────────────────────────────────────────────────────────
-    for (auto* b : { &synthTabBtn_, &effectsTabBtn_ }) {
+    for (auto* b : { &synthTabBtn_, &effectsTabBtn_, &modTabBtn_, &sequencerTabBtn_ }) {
         b->setColour(juce::TextButton::buttonColourId,    BCol::knobBg);
         b->setColour(juce::TextButton::buttonOnColourId,  BCol::accent.withAlpha(0.3f));
         b->setColour(juce::TextButton::textColourOffId,   BCol::textDim);
@@ -369,19 +371,16 @@ BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProce
         addAndMakeVisible(b);
     }
     synthTabBtn_.setToggleState(true, juce::dontSendNotification);
-    synthTabBtn_.onClick      = [this] { setTab(Tab::Synth);      };
-    effectsTabBtn_.onClick    = [this] { setTab(Tab::Effects);    };
-    sequencerTabBtn_.onClick  = [this] { setTab(Tab::Sequencer);  };
-
-    sequencerTabBtn_.setColour(juce::TextButton::buttonColourId,    BCol::knobBg);
-    sequencerTabBtn_.setColour(juce::TextButton::buttonOnColourId,  BCol::accent.withAlpha(0.3f));
-    sequencerTabBtn_.setColour(juce::TextButton::textColourOffId,   BCol::textDim);
-    sequencerTabBtn_.setColour(juce::TextButton::textColourOnId,    BCol::accent);
-    sequencerTabBtn_.setClickingTogglesState(false);
-    addAndMakeVisible(sequencerTabBtn_);
+    synthTabBtn_.onClick      = [this] { setTab(Tab::Synth);       };
+    effectsTabBtn_.onClick    = [this] { setTab(Tab::Effects);     };
+    modTabBtn_.onClick        = [this] { setTab(Tab::Modulation);  };
+    sequencerTabBtn_.onClick  = [this] { setTab(Tab::Sequencer);   };
 
     addAndMakeVisible(sequencerPanel_);
     sequencerPanel_.setVisible(false);
+
+    addAndMakeVisible(*modPanel_);
+    modPanel_->setVisible(false);
 
     setEffectsVisible(false);
 
@@ -400,6 +399,7 @@ void BombSynthAudioProcessorEditor::setSynthVisible(bool v) {
     filterSection_.setVisible(v);
     for (auto* k : { &cutoffKnob_, &resKnob_, &driveKnob_, &envAmtKnob_ }) k->setVisible(v);
     filterTypeBox_.setVisible(v);  filterTypeLabel_.setVisible(v);
+    filterDisplay_.setVisible(v);
     ampEnvSection_.setVisible(v);
     for (auto* k : { &ampAttKnob_, &ampDecKnob_, &ampSusKnob_, &ampRelKnob_, &ampCrvKnob_ }) k->setVisible(v);
     filterEnvSection_.setVisible(v);
@@ -417,6 +417,10 @@ void BombSynthAudioProcessorEditor::setSequencerVisible(bool v) {
     sequencerPanel_.setVisible(v);
 }
 
+void BombSynthAudioProcessorEditor::setModulationVisible(bool v) {
+    if (modPanel_) modPanel_->setVisible(v);
+}
+
 void BombSynthAudioProcessorEditor::setEffectsVisible(bool v) {
     reverbSection_.setVisible(v);
     for (auto* k : { &revRoomKnob_, &revDampKnob_, &revWidthKnob_, &revWetKnob_ }) k->setVisible(v);
@@ -428,11 +432,13 @@ void BombSynthAudioProcessorEditor::setEffectsVisible(bool v) {
 
 void BombSynthAudioProcessorEditor::setTab(Tab t) {
     activeTab_ = t;
-    synthTabBtn_     .setToggleState(t == Tab::Synth,      juce::dontSendNotification);
-    effectsTabBtn_   .setToggleState(t == Tab::Effects,    juce::dontSendNotification);
-    sequencerTabBtn_ .setToggleState(t == Tab::Sequencer,  juce::dontSendNotification);
+    synthTabBtn_     .setToggleState(t == Tab::Synth,       juce::dontSendNotification);
+    effectsTabBtn_   .setToggleState(t == Tab::Effects,     juce::dontSendNotification);
+    modTabBtn_       .setToggleState(t == Tab::Modulation,  juce::dontSendNotification);
+    sequencerTabBtn_ .setToggleState(t == Tab::Sequencer,   juce::dontSendNotification);
     setSynthVisible    (t == Tab::Synth);
     setEffectsVisible  (t == Tab::Effects);
+    setModulationVisible(t == Tab::Modulation);
     setSequencerVisible(t == Tab::Sequencer);
     resized();
     repaint();
@@ -441,11 +447,13 @@ void BombSynthAudioProcessorEditor::setTab(Tab t) {
 void BombSynthAudioProcessorEditor::timerCallback() {
     auto& par = proc_.parameters();
     auto getF = [&](const char* id) { return par.getRawParameterValue(id)->load(); };
+    auto getI = [&](const char* id) { return (int)par.getRawParameterValue(id)->load(); };
     auto norm = [](float ms) { return std::pow(ms / 10000.f, 0.25f); };
     ampEnvDisplay_.setADSR(norm(getF("amp_attack")),  norm(getF("amp_decay")),
                             getF("amp_sustain"),       norm(getF("amp_release")));
     fEnvDisplay_.setADSR  (norm(getF("fenv_attack")), norm(getF("fenv_decay")),
                             getF("fenv_sustain"),      norm(getF("fenv_release")));
+    filterDisplay_.setParams(getI("filter_type"), getF("filter_cutoff"), getF("filter_res"));
 }
 
 // ─── Preset browser helpers ───────────────────────────────────────────────────
@@ -551,6 +559,9 @@ void BombSynthAudioProcessorEditor::loadWavetableForOsc(int oscIdx) {
 
             if (bankIdx < 0) return;   // error
 
+            // Persist the path
+            proc_.addUserWavetablePath(f.getFullPathName());
+
             // Set param & display
             if (auto* param = proc_.parameters().getParameter(bankIds[oscIdx])) {
                 auto* rp = dynamic_cast<juce::RangedAudioParameter*>(param);
@@ -594,7 +605,7 @@ void BombSynthAudioProcessorEditor::paint(juce::Graphics& g) {
 
     g.setFont(juce::Font(10.f));
     g.setColour(BCol::textDim);
-    g.drawText("v0.4.0  |  Illbomb", getWidth() - 200, 0, 140, hH,
+    g.drawText("v0.5.0  |  Illbomb", getWidth() - 200, 0, 140, hH,
                juce::Justification::centredRight);
 }
 
@@ -629,7 +640,8 @@ void BombSynthAudioProcessorEditor::resized() {
         int tx = pad, ty = hH + 2;
         synthTabBtn_     .setBounds(tx,                         ty, tabW,    tabH);
         effectsTabBtn_   .setBounds(tx + tabW + gap,            ty, tabW,    tabH);
-        sequencerTabBtn_ .setBounds(tx + (tabW + gap) * 2,      ty, seqTabW, tabH);
+        modTabBtn_       .setBounds(tx + (tabW + gap) * 2,      ty, tabW,    tabH);
+        sequencerTabBtn_ .setBounds(tx + (tabW + gap) * 3,      ty, seqTabW, tabH);
     }
 
     const int kTabBarH = 32;
@@ -638,6 +650,11 @@ void BombSynthAudioProcessorEditor::resized() {
 
     if (activeTab_ == Tab::Sequencer) {
         sequencerPanel_.setBounds(area);
+        return;
+    }
+
+    if (activeTab_ == Tab::Modulation) {
+        if (modPanel_) modPanel_->setBounds(area);
         return;
     }
 
@@ -694,7 +711,7 @@ void BombSynthAudioProcessorEditor::resized() {
     area.removeFromTop(pad);
 
     // ── Row 2: Filter  |  Amp Env  |  Filter Env ──────────────────────────────
-    auto row2 = area.removeFromTop(165);
+    auto row2 = area.removeFromTop(220);
 
     // Filter (27%)
     int filterW = (int)(area.getWidth() * 0.27f);
@@ -704,6 +721,8 @@ void BombSynthAudioProcessorEditor::resized() {
     auto typeRow = fc.removeFromTop(36);
     filterTypeLabel_.setBounds(typeRow.removeFromTop(14));
     filterTypeBox_  .setBounds(typeRow.withTrimmedRight(4).withTrimmedLeft(4));
+    filterDisplay_  .setBounds(fc.removeFromTop(52).reduced(2, 0));
+    fc.removeFromTop(2);
     const int fkW = fc.getWidth() / 4;
     for (auto* k : { &cutoffKnob_, &resKnob_, &driveKnob_, &envAmtKnob_ })
         k->setBounds(fc.removeFromLeft(fkW));

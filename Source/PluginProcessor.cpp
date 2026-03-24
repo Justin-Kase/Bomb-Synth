@@ -1,109 +1,122 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "engine/oscillators/WavetableBank.h"
+#include <juce_audio_formats/juce_audio_formats.h>
 
 juce::AudioProcessorValueTreeState::ParameterLayout BombSynthAudioProcessor::createParameters() {
-    std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
+    using namespace juce;
+    std::vector<std::unique_ptr<RangedAudioParameter>> p;
 
     // ── Master ───────────────────────────────────────────────────────────────
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("master_gain", "Master Volume",
-        juce::NormalisableRange<float>{0.f, 1.f}, 0.8f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("glide_time",  "Glide Time",
-        juce::NormalisableRange<float>{0.f, 5000.f, 0.f, 0.3f}, 0.f));
+    p.push_back(std::make_unique<AudioParameterFloat>("master_gain", "Master Volume",
+        NormalisableRange<float>{0.f, 1.f}, 0.8f));
+    p.push_back(std::make_unique<AudioParameterFloat>("glide_time",  "Glide Time",
+        NormalisableRange<float>{0.f, 5000.f, 0.f, 0.3f}, 0.f));
 
     // ── Oscillators ──────────────────────────────────────────────────────────
     for (int i = 1; i <= 3; ++i) {
-        juce::String n(i);
-        // bank index: 0-5 (replaces old 0-4 wave selector)
-        p.push_back(std::make_unique<juce::AudioParameterInt>  ("osc"+n+"_wave",  "OSC "+n+" Bank",  0, 31, 0));
-        p.push_back(std::make_unique<juce::AudioParameterFloat>("osc"+n+"_morph", "OSC "+n+" Morph",
-            juce::NormalisableRange<float>{0.f, 1.f}, 0.f));
-        p.push_back(std::make_unique<juce::AudioParameterFloat>("osc"+n+"_tune",  "OSC "+n+" Tune",
-            juce::NormalisableRange<float>{-24.f, 24.f, 1.f}, 0.f));
-        p.push_back(std::make_unique<juce::AudioParameterFloat>("osc"+n+"_fine",  "OSC "+n+" Fine",
-            juce::NormalisableRange<float>{-100.f, 100.f}, 0.f));
-        p.push_back(std::make_unique<juce::AudioParameterFloat>("osc"+n+"_level", "OSC "+n+" Level",
-            juce::NormalisableRange<float>{0.f, 1.f}, i == 1 ? 1.f : 0.f));
-        p.push_back(std::make_unique<juce::AudioParameterFloat>("osc"+n+"_fm",    "OSC "+n+" FM",
-            juce::NormalisableRange<float>{0.f, 1.f}, 0.f));
-        p.push_back(std::make_unique<juce::AudioParameterInt>  ("osc"+n+"_uni",   "OSC "+n+" Unison", 1, 8, 1));
-        p.push_back(std::make_unique<juce::AudioParameterFloat>("osc"+n+"_detune","OSC "+n+" Detune",
-            juce::NormalisableRange<float>{0.f, 1.f}, 0.f));
+        String n(i);
+        p.push_back(std::make_unique<AudioParameterInt>  ("osc"+n+"_wave",  "OSC "+n+" Bank",  0, 31, 0));
+        p.push_back(std::make_unique<AudioParameterFloat>("osc"+n+"_morph", "OSC "+n+" Morph",
+            NormalisableRange<float>{0.f, 1.f}, 0.f));
+        p.push_back(std::make_unique<AudioParameterFloat>("osc"+n+"_tune",  "OSC "+n+" Tune",
+            NormalisableRange<float>{-24.f, 24.f, 1.f}, 0.f));
+        p.push_back(std::make_unique<AudioParameterFloat>("osc"+n+"_fine",  "OSC "+n+" Fine",
+            NormalisableRange<float>{-100.f, 100.f}, 0.f));
+        p.push_back(std::make_unique<AudioParameterFloat>("osc"+n+"_level", "OSC "+n+" Level",
+            NormalisableRange<float>{0.f, 1.f}, i == 1 ? 1.f : 0.f));
+        p.push_back(std::make_unique<AudioParameterFloat>("osc"+n+"_fm",    "OSC "+n+" FM",
+            NormalisableRange<float>{0.f, 1.f}, 0.f));
+        p.push_back(std::make_unique<AudioParameterInt>  ("osc"+n+"_uni",   "OSC "+n+" Unison", 1, 8, 1));
+        p.push_back(std::make_unique<AudioParameterFloat>("osc"+n+"_detune","OSC "+n+" Detune",
+            NormalisableRange<float>{0.f, 1.f}, 0.f));
     }
 
     // ── Filter ───────────────────────────────────────────────────────────────
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("filter_cutoff", "Cutoff",
-        juce::NormalisableRange<float>{20.f, 20000.f, 0.f, 0.25f}, 6000.f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("filter_res",    "Resonance",
-        juce::NormalisableRange<float>{0.f, 1.f}, 0.f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("filter_drive",  "Drive",
-        juce::NormalisableRange<float>{1.f, 8.f, 0.f, 0.5f}, 1.f));
-    p.push_back(std::make_unique<juce::AudioParameterInt>  ("filter_type",   "Filter Type", 0, 4, 0));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("filter_env_amt","Filter Env Amt",
-        juce::NormalisableRange<float>{-1.f, 1.f}, 0.f));
+    p.push_back(std::make_unique<AudioParameterFloat>("filter_cutoff", "Cutoff",
+        NormalisableRange<float>{20.f, 20000.f, 0.f, 0.25f}, 6000.f));
+    p.push_back(std::make_unique<AudioParameterFloat>("filter_res",    "Resonance",
+        NormalisableRange<float>{0.f, 1.f}, 0.f));
+    p.push_back(std::make_unique<AudioParameterFloat>("filter_drive",  "Drive",
+        NormalisableRange<float>{1.f, 8.f, 0.f, 0.5f}, 1.f));
+    p.push_back(std::make_unique<AudioParameterInt>  ("filter_type",   "Filter Type", 0, 5, 0));
+    p.push_back(std::make_unique<AudioParameterFloat>("filter_env_amt","Filter Env Amt",
+        NormalisableRange<float>{-1.f, 1.f}, 0.f));
 
     // ── Amp Envelope ─────────────────────────────────────────────────────────
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("amp_attack",  "Amp Attack",
-        juce::NormalisableRange<float>{0.1f, 10000.f, 0.f, 0.25f}, 5.f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("amp_decay",   "Amp Decay",
-        juce::NormalisableRange<float>{0.1f, 10000.f, 0.f, 0.25f}, 150.f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("amp_sustain", "Amp Sustain",
-        juce::NormalisableRange<float>{0.f, 1.f}, 0.75f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("amp_release", "Amp Release",
-        juce::NormalisableRange<float>{0.1f, 10000.f, 0.f, 0.25f}, 300.f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("amp_curve",   "Amp Curve",
-        juce::NormalisableRange<float>{-1.f, 1.f}, 0.f));
+    p.push_back(std::make_unique<AudioParameterFloat>("amp_attack",  "Amp Attack",
+        NormalisableRange<float>{0.1f, 10000.f, 0.f, 0.25f}, 5.f));
+    p.push_back(std::make_unique<AudioParameterFloat>("amp_decay",   "Amp Decay",
+        NormalisableRange<float>{0.1f, 10000.f, 0.f, 0.25f}, 150.f));
+    p.push_back(std::make_unique<AudioParameterFloat>("amp_sustain", "Amp Sustain",
+        NormalisableRange<float>{0.f, 1.f}, 0.75f));
+    p.push_back(std::make_unique<AudioParameterFloat>("amp_release", "Amp Release",
+        NormalisableRange<float>{0.1f, 10000.f, 0.f, 0.25f}, 300.f));
+    p.push_back(std::make_unique<AudioParameterFloat>("amp_curve",   "Amp Curve",
+        NormalisableRange<float>{-1.f, 1.f}, 0.f));
 
     // ── Filter Envelope ───────────────────────────────────────────────────────
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("fenv_attack",  "Filter Attack",
-        juce::NormalisableRange<float>{0.1f, 10000.f, 0.f, 0.25f}, 5.f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("fenv_decay",   "Filter Decay",
-        juce::NormalisableRange<float>{0.1f, 10000.f, 0.f, 0.25f}, 300.f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("fenv_sustain", "Filter Sustain",
-        juce::NormalisableRange<float>{0.f, 1.f}, 0.5f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("fenv_release", "Filter Release",
-        juce::NormalisableRange<float>{0.1f, 10000.f, 0.f, 0.25f}, 500.f));
+    p.push_back(std::make_unique<AudioParameterFloat>("fenv_attack",  "Filter Attack",
+        NormalisableRange<float>{0.1f, 10000.f, 0.f, 0.25f}, 5.f));
+    p.push_back(std::make_unique<AudioParameterFloat>("fenv_decay",   "Filter Decay",
+        NormalisableRange<float>{0.1f, 10000.f, 0.f, 0.25f}, 300.f));
+    p.push_back(std::make_unique<AudioParameterFloat>("fenv_sustain", "Filter Sustain",
+        NormalisableRange<float>{0.f, 1.f}, 0.5f));
+    p.push_back(std::make_unique<AudioParameterFloat>("fenv_release", "Filter Release",
+        NormalisableRange<float>{0.1f, 10000.f, 0.f, 0.25f}, 500.f));
 
     // ── LFO 1 ────────────────────────────────────────────────────────────────
-    p.push_back(std::make_unique<juce::AudioParameterInt>  ("lfo1_shape", "LFO1 Shape", 0, 6, 0));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("lfo1_rate",  "LFO1 Rate",
-        juce::NormalisableRange<float>{0.01f, 30.f, 0.f, 0.4f}, 1.f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("lfo1_depth", "LFO1 Depth",
-        juce::NormalisableRange<float>{0.f, 1.f}, 0.f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("lfo1_phase", "LFO1 Phase",
-        juce::NormalisableRange<float>{0.f, 1.f}, 0.f));
+    p.push_back(std::make_unique<AudioParameterInt>  ("lfo1_shape", "LFO1 Shape", 0, 6, 0));
+    p.push_back(std::make_unique<AudioParameterFloat>("lfo1_rate",  "LFO1 Rate",
+        NormalisableRange<float>{0.01f, 30.f, 0.f, 0.4f}, 1.f));
+    p.push_back(std::make_unique<AudioParameterFloat>("lfo1_depth", "LFO1 Depth",
+        NormalisableRange<float>{0.f, 1.f}, 0.f));
+    p.push_back(std::make_unique<AudioParameterFloat>("lfo1_phase", "LFO1 Phase",
+        NormalisableRange<float>{0.f, 1.f}, 0.f));
 
     // ── LFO 2 ────────────────────────────────────────────────────────────────
-    p.push_back(std::make_unique<juce::AudioParameterInt>  ("lfo2_shape", "LFO2 Shape", 0, 6, 2));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("lfo2_rate",  "LFO2 Rate",
-        juce::NormalisableRange<float>{0.01f, 30.f, 0.f, 0.4f}, 0.5f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("lfo2_depth", "LFO2 Depth",
-        juce::NormalisableRange<float>{0.f, 1.f}, 0.f));
+    p.push_back(std::make_unique<AudioParameterInt>  ("lfo2_shape", "LFO2 Shape", 0, 6, 2));
+    p.push_back(std::make_unique<AudioParameterFloat>("lfo2_rate",  "LFO2 Rate",
+        NormalisableRange<float>{0.01f, 30.f, 0.f, 0.4f}, 0.5f));
+    p.push_back(std::make_unique<AudioParameterFloat>("lfo2_depth", "LFO2 Depth",
+        NormalisableRange<float>{0.f, 1.f}, 0.f));
+
+    // ── Mod Routing Slots (8×) ───────────────────────────────────────────────
+    // Source: 0=Off 1=LFO1 2=LFO2 3=Velocity 4=ModWheel
+    // Target: 0=Off 1=Cutoff 2=Pitch 3=Amp 4=Osc1Morph 5=Osc2Morph 6=Osc3Morph 7=LFO2Rate
+    for (int i = 0; i < 8; ++i) {
+        String s(i);
+        p.push_back(std::make_unique<AudioParameterInt>  ("mod"+s+"_src", "Mod"+s+" Source", 0, 4, 0));
+        p.push_back(std::make_unique<AudioParameterInt>  ("mod"+s+"_dst", "Mod"+s+" Target", 0, 7, 0));
+        p.push_back(std::make_unique<AudioParameterFloat>("mod"+s+"_amt", "Mod"+s+" Amount",
+            NormalisableRange<float>{-1.f, 1.f}, i == 0 ? 0.5f : 0.f));
+    }
 
     // ── Reverb ────────────────────────────────────────────────────────────────
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("reverb_room",  "Reverb Room",
-        juce::NormalisableRange<float>{0.f, 1.f}, 0.5f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("reverb_damp",  "Reverb Damp",
-        juce::NormalisableRange<float>{0.f, 1.f}, 0.5f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("reverb_width", "Reverb Width",
-        juce::NormalisableRange<float>{0.f, 1.f}, 1.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("reverb_wet",   "Reverb Wet",
-        juce::NormalisableRange<float>{0.f, 1.f}, 0.f));
+    p.push_back(std::make_unique<AudioParameterFloat>("reverb_room",  "Reverb Room",
+        NormalisableRange<float>{0.f, 1.f}, 0.5f));
+    p.push_back(std::make_unique<AudioParameterFloat>("reverb_damp",  "Reverb Damp",
+        NormalisableRange<float>{0.f, 1.f}, 0.5f));
+    p.push_back(std::make_unique<AudioParameterFloat>("reverb_width", "Reverb Width",
+        NormalisableRange<float>{0.f, 1.f}, 1.0f));
+    p.push_back(std::make_unique<AudioParameterFloat>("reverb_wet",   "Reverb Wet",
+        NormalisableRange<float>{0.f, 1.f}, 0.f));
 
     // ── Delay ─────────────────────────────────────────────────────────────────
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("delay_time", "Delay Time",
-        juce::NormalisableRange<float>{1.f, 2000.f, 0.f, 0.4f}, 250.f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("delay_fb",   "Delay Feedback",
-        juce::NormalisableRange<float>{0.f, 0.95f}, 0.4f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("delay_wet",  "Delay Wet",
-        juce::NormalisableRange<float>{0.f, 1.f}, 0.f));
+    p.push_back(std::make_unique<AudioParameterFloat>("delay_time", "Delay Time",
+        NormalisableRange<float>{1.f, 2000.f, 0.f, 0.4f}, 250.f));
+    p.push_back(std::make_unique<AudioParameterFloat>("delay_fb",   "Delay Feedback",
+        NormalisableRange<float>{0.f, 0.95f}, 0.4f));
+    p.push_back(std::make_unique<AudioParameterFloat>("delay_wet",  "Delay Wet",
+        NormalisableRange<float>{0.f, 1.f}, 0.f));
 
     // ── Chorus ────────────────────────────────────────────────────────────────
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("chorus_rate",  "Chorus Rate",
-        juce::NormalisableRange<float>{0.1f, 8.f, 0.f, 0.5f}, 1.5f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("chorus_depth", "Chorus Depth",
-        juce::NormalisableRange<float>{0.f, 1.f}, 0.5f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("chorus_wet",   "Chorus Wet",
-        juce::NormalisableRange<float>{0.f, 1.f}, 0.f));
+    p.push_back(std::make_unique<AudioParameterFloat>("chorus_rate",  "Chorus Rate",
+        NormalisableRange<float>{0.1f, 8.f, 0.f, 0.5f}, 1.5f));
+    p.push_back(std::make_unique<AudioParameterFloat>("chorus_depth", "Chorus Depth",
+        NormalisableRange<float>{0.f, 1.f}, 0.5f));
+    p.push_back(std::make_unique<AudioParameterFloat>("chorus_wet",   "Chorus Wet",
+        NormalisableRange<float>{0.f, 1.f}, 0.f));
 
     return { p.begin(), p.end() };
 }
@@ -112,7 +125,6 @@ BombSynthAudioProcessor::BombSynthAudioProcessor()
     : juce::AudioProcessor(BusesProperties()
         .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
-    // Force wavetable library initialisation on the UI thread at load time
     (void)WavetableBankLibrary::get();
 }
 
@@ -120,6 +132,9 @@ void BombSynthAudioProcessor::prepareToPlay(double sr, int blockSize) {
     sampleRate_ = sr;
     sequencer_.prepare(sr);
     engine_.prepare(sr, blockSize);
+
+    lfo1_.prepare(sr, blockSize);
+    lfo2_.prepare(sr, blockSize);
 
     // Reverb
     {
@@ -143,6 +158,7 @@ void BombSynthAudioProcessor::prepareToPlay(double sr, int blockSize) {
     for (auto& buf : delayBuf_) { buf.assign(maxSmp, 0.f); }
     delayWrite_ = 0;
 }
+
 void BombSynthAudioProcessor::releaseResources() { engine_.reset(); }
 
 #ifndef JucePlugin_PreferredChannelConfigurations
@@ -151,17 +167,22 @@ bool BombSynthAudioProcessor::isBusesLayoutSupported(const BusesLayout& l) const
 }
 #endif
 
+void BombSynthAudioProcessor::addUserWavetablePath(const juce::String& path) {
+    if (!userWavetablePaths_.contains(path))
+        userWavetablePaths_.add(path);
+}
+
 void BombSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::MidiBuffer& midi) {
     juce::ScopedNoDenormals nd;
 
-    auto get  = [&](const char* id)  { return params_.getRawParameterValue(id)->load(); };
-    auto geti = [&](const char* id)  { return (int)params_.getRawParameterValue(id)->load(); };
+    auto get  = [&](const char* id) { return params_.getRawParameterValue(id)->load(); };
+    auto geti = [&](const char* id) { return (int)params_.getRawParameterValue(id)->load(); };
 
     // ── Oscillators ──────────────────────────────────────────────────────────
-    static const char* bankIds[3]   = {"osc1_wave","osc2_wave","osc3_wave"};
-    static const char* morphIds[3]  = {"osc1_morph","osc2_morph","osc3_morph"};
-    static const char* levelIds[3]  = {"osc1_level","osc2_level","osc3_level"};
-    static const char* tuneIds[3]   = {"osc1_tune","osc2_tune","osc3_tune"};
+    static const char* bankIds[3]  = {"osc1_wave","osc2_wave","osc3_wave"};
+    static const char* morphIds[3] = {"osc1_morph","osc2_morph","osc3_morph"};
+    static const char* levelIds[3] = {"osc1_level","osc2_level","osc3_level"};
+    static const char* tuneIds[3]  = {"osc1_tune","osc2_tune","osc3_tune"};
 
     for (int i = 0; i < 3; ++i) {
         engine_.setOscBankIndex(i, geti(bankIds[i]));
@@ -173,6 +194,7 @@ void BombSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::
     // ── Filter ───────────────────────────────────────────────────────────────
     engine_.setCutoff   (get("filter_cutoff"));
     engine_.setResonance(get("filter_res"));
+    engine_.setFilterType(geti("filter_type"));
 
     // ── Envelopes ─────────────────────────────────────────────────────────────
     ADSR::Params amp;
@@ -191,6 +213,62 @@ void BombSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::
     engine_.setAmpEnvParams   (amp);
     engine_.setFilterEnvParams(fenv);
     engine_.setMasterGain(get("master_gain"));
+
+    // ── LFO processing ────────────────────────────────────────────────────────
+    lfo1_.setShape(geti("lfo1_shape"));
+    lfo1_.setRate (get ("lfo1_rate"));
+    lfo1_.setDepth(get ("lfo1_depth"));
+    lfo1_.setPhase(get ("lfo1_phase"));
+
+    // Allow LFO2 rate to be modulated (by mod slot targeting LFO2Rate)
+    float lfo2Rate = get("lfo2_rate");
+    lfo2_.setShape(geti("lfo2_shape"));
+    lfo2_.setRate (lfo2Rate);
+    lfo2_.setDepth(get("lfo2_depth"));
+
+    const float lfo1val = lfo1_.tick();
+    const float lfo2val = lfo2_.tick();
+
+    // ── Mod routing slots ──────────────────────────────────────────────────────
+    modCutoff_ = 0.f;
+    modPitch_  = 0.f;
+    modAmp_    = 0.f;
+    modMorph_  = { 0.f, 0.f, 0.f };
+
+    for (int i = 0; i < 8; ++i) {
+        juce::String s(i);
+        const int   src = geti(("mod" + s + "_src").toRawUTF8());
+        const int   dst = geti(("mod" + s + "_dst").toRawUTF8());
+        const float amt = get (("mod" + s + "_amt").toRawUTF8());
+
+        if (src == 0 || dst == 0) continue;   // Off
+
+        float modVal = 0.f;
+        switch (src) {
+            case 1: modVal = lfo1val; break;
+            case 2: modVal = lfo2val; break;
+            case 3: modVal = 0.f;     break;   // Velocity — not available at block rate
+            case 4: modVal = 0.f;     break;   // ModWheel — not yet wired
+            default: break;
+        }
+        modVal *= amt;
+
+        switch (dst) {
+            case 1: modCutoff_    += modVal * 10000.f;  break;  // Cutoff offset in Hz
+            case 2: modPitch_     += modVal * 12.f;     break;  // Pitch ±12 semitones
+            case 3: modAmp_       += modVal;             break;  // Amp offset
+            case 4: modMorph_[0] += modVal;             break;
+            case 5: modMorph_[1] += modVal;             break;
+            case 6: modMorph_[2] += modVal;             break;
+            case 7: lfo2_.setRate(juce::jmax(0.01f, lfo2Rate + modVal * 10.f)); break;
+            default: break;
+        }
+    }
+
+    engine_.setModCutoffHz      (modCutoff_);
+    engine_.setModPitchSemitones(modPitch_);
+    engine_.setModAmp           (modAmp_);
+    for (int i = 0; i < 3; ++i) engine_.setModMorph(i, modMorph_[i]);
 
     // Inject sequencer MIDI before engine processes
     sequencer_.processBlock(midi, buf.getNumSamples(), getPlayHead());
@@ -235,7 +313,7 @@ void BombSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::
             chorus_.setFeedback   (0.f);
             chorus_.setMix        (choWet);
 
-            juce::dsp::AudioBlock<float>            block(buf);
+            juce::dsp::AudioBlock<float>              block(buf);
             juce::dsp::ProcessContextReplacing<float> ctx(block);
             chorus_.process(ctx);
         }
@@ -253,7 +331,7 @@ void BombSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::
             rp.dryLevel   = 1.f - revWet * 0.5f;
             rp.freezeMode = 0.f;
             reverb_.setParameters(rp);
-            juce::dsp::AudioBlock<float>             revBlock(buf);
+            juce::dsp::AudioBlock<float>              revBlock(buf);
             juce::dsp::ProcessContextReplacing<float> revCtx(revBlock);
             reverb_.process(revCtx);
         }
@@ -269,15 +347,53 @@ void BombSynthAudioProcessor::getStateInformation(juce::MemoryBlock& d) {
     auto s = params_.copyState();
     if (auto px = s.createXml()) root->addChildElement(px.release());
     root->addChildElement(sequencer_.createXml());
+
+    // Persist user wavetable file paths
+    auto* wtElem = new juce::XmlElement("UserWavetables");
+    for (const auto& path : userWavetablePaths_) {
+        auto* fileElem = new juce::XmlElement("File");
+        fileElem->setAttribute("path", path);
+        wtElem->addChildElement(fileElem);
+    }
+    root->addChildElement(wtElem);
+
     copyXmlToBinary(*root, d);
 }
+
 void BombSynthAudioProcessor::setStateInformation(const void* d, int sz) {
     if (auto root = std::unique_ptr<juce::XmlElement>(getXmlFromBinary(d, sz))) {
-        // Support both old (bare APVTS) and new (wrapped) state
         if (root->getTagName() == "BombSynthState") {
             if (auto* px = root->getFirstChildElement())
                 params_.replaceState(juce::ValueTree::fromXml(*px));
             sequencer_.loadFromXml(root->getChildByName("Sequencer"));
+
+            // Reload user wavetables
+            if (auto* wtElem = root->getChildByName("UserWavetables")) {
+                juce::AudioFormatManager mgr;
+                mgr.registerBasicFormats();
+
+                for (auto* fileElem : wtElem->getChildIterator()) {
+                    juce::String path = fileElem->getStringAttribute("path");
+                    juce::File   f(path);
+                    if (!f.existsAsFile()) continue;
+
+                    std::unique_ptr<juce::AudioFormatReader> reader(mgr.createReaderFor(f));
+                    if (!reader) continue;
+
+                    const int total = (int)reader->lengthInSamples;
+                    if (total < 2) continue;
+
+                    juce::AudioBuffer<float> wavBuf(1, total);
+                    reader->read(&wavBuf, 0, total, 0, true, true);
+
+                    WavetableBankLibrary::get().addUserBank(
+                        f.getFileNameWithoutExtension(), 0xFFE040FB,
+                        wavBuf.getReadPointer(0), total, path);
+
+                    if (!userWavetablePaths_.contains(path))
+                        userWavetablePaths_.add(path);
+                }
+            }
         } else {
             params_.replaceState(juce::ValueTree::fromXml(*root));
         }
