@@ -22,73 +22,127 @@ VST3 + AU · macOS Universal (arm64 / x86_64) · C++17 · JUCE 8
 
 ## What It Is
 
-Bomb Synth is a professional-grade hybrid synthesizer with three independent oscillators, each backed by a **6-bank wavetable engine** with real-time waveform visualization. Each bank contains 8 morphable frames generated via additive synthesis — sweep through them with the MORPH knob and watch the oscilloscope animate live.
-
-You can also **load your own wavetable files** (WAV or AIFF) from any source — single-cycle waveforms, Serum/Surge exports, recorded samples, anything — and they slot straight into the oscillator alongside the built-in banks.
-
-70 factory presets across 9 categories. Dual filters (Moog Ladder + SVF), dual LFOs, amp and filter envelopes, 16-voice polyphony, fully resizable 1100×700 UI.
+Bomb Synth is a professional-grade hybrid synthesizer. Three independent oscillators each backed by a **6-bank wavetable engine** with real-time waveform visualization and custom wavetable loading. A full **effects rack** (Reverb, Delay, Chorus). A **polyrhythmic step sequencer + arpeggiator** with probability, microtiming, and scale quantization. 70 factory presets. 16-voice polyphony. Fully resizable 1100×700 UI.
 
 ---
 
-## Wavetable Banks
+## Features at a Glance
 
-Each of the 3 oscillators independently selects a bank and morphs through its 8 frames:
+| Module | What it does |
+|--------|-------------|
+| **3× Wavetable Oscillators** | 6 built-in banks × 8 morphable frames each. Load your own WAV/AIFF. |
+| **Filter** | Moog Ladder LP/HP (4-pole) + SVF LP/BP. Drive, resonance, filter envelope. |
+| **Effects** | Reverb, Delay (ping-pong), Chorus — all post-synth, wet/dry per effect. |
+| **Sequencer** | 4 polyrhythmic lanes, probability per step, microtiming, scale quantization. |
+| **Arpeggiator** | Up/Down/UpDown/Random/As Played, 1–4 octaves, DAW tempo sync. |
+| **Modulation** | 2× LFOs (7 shapes), amp envelope, filter envelope, mod matrix. |
+| **Presets** | 70 factory presets across 9 categories. |
+
+---
+
+## Wavetable Oscillators
+
+### Built-in Banks
 
 | Bank | Color | Character |
 |------|-------|-----------|
-| **ANALOG** | Sky blue | Sine → Soft → Triangle → Saw (8/16/32 harmonics) → Square → Pulse 25% |
-| **DIGITAL** | Purple | Hollow → Ringy → Bell → FM-like → Clipped → Prime harmonics → Bright → Max |
-| **VOCAL** | Amber | Formant vowel morphing: AH → EH → EE → IH → OH → OO → UH → AA |
-| **BRASS** | Orange | Progressive harmonic opening from soft to full blaring brass |
-| **PLUCK** | Green | Steep rolloff (muted pluck) → gentle rolloff (resonant string) |
-| **ORGAN** | Pink | Hammond drawbar presets: Flute → Jazz I/II → Gospel → Rock → Full |
+| **ANALOG** | Sky blue | Sine → Soft → Triangle → Saw (8/16/32h) → Square → Pulse 25% |
+| **DIGITAL** | Purple | Hollow → Ringy → Bell → FM-like → Clipped → Primes → Bright → Max |
+| **VOCAL** | Amber | Formant vowels: AH → EH → EE → IH → OH → OO → UH → AA |
+| **BRASS** | Orange | Progressive harmonic brightness: soft → full blaring brass |
+| **PLUCK** | Green | Steep rolloff (muted pluck) → gentle rolloff (string) |
+| **ORGAN** | Pink | Hammond drawbars: Flute → Jazz I/II → Gospel → Rock → Full |
 
-Banks are generated at load time via **additive synthesis** (sum of sine harmonics).
+### Loading Custom Wavetables
 
-### Loading Your Own Wavetables
+Click the **↑** icon in the top-right of any oscillator display. Supports WAV and AIFF:
 
-Click the **↑** icon in the top-right corner of any oscillator display to open a file browser. Supports WAV and AIFF:
+- **Single-cycle WAV** — replicated across all 8 morph frames
+- **Multi-frame WAV** (Serum/Surge format, 256-cycle files) — sliced into 8 evenly spaced frames
+- **Any audio file** — recorded instruments, vocals, field recordings, anything
 
-- **Single-cycle WAV** (e.g. Adventure Kid AKWF, Surge factory banks) — replicated across all 8 morph frames
-- **Multi-frame wavetable** (e.g. Serum `.wav` exports, 256-cycle files) — sliced into 8 evenly spaced frames you can morph through
-- **Any WAV/AIFF** — recorded instruments, vocals, synths, field recordings
+Up to 26 user banks per session, each with a unique colour.
 
-Loaded banks appear immediately in the `< >` navigation alongside built-in banks, each assigned a unique colour. Up to 26 user banks per session.
+---
+
+## Sequencer & Arpeggiator
+
+Access via the **SEQUENCER** tab.
+
+### Step Sequencer
+
+- **4 polyrhythmic lanes** — each lane has an independent step count (1–16). Different step counts create natural polyrhythms that loop against each other.
+- **Per-step controls:**
+  - **Note** — MIDI note value, quantized to the active scale
+  - **Velocity** — drag vertically on any step cell to set. Fill height = velocity.
+  - **Gate** — click to toggle. Off steps are dark.
+  - **Probability** — 0–100%. An orange dot at the bottom shows reduced probability steps.
+  - **Microtiming** — ±50% of step duration. A yellow triangle shows the push/pull offset.
+  - **Gate length** — per step, as fraction of step duration
+- **Per-lane controls:** step count, octave transpose (±3), swing
+- **Scale quantization** — 12 scales available. All programmed notes snap to the selected scale.
+- **Click a step** to select it. The detail panel shows all step parameters with `< >` spinners.
+
+### Scale Options
+
+Chromatic · Major · Minor · Dorian · Mixolydian · Pentatonic Maj · Pentatonic Min · Blues · Harmonic Minor · Whole Tone · Diminished · Phrygian
+
+### Arpeggiator
+
+- **Modes:** Up / Down / Up+Down / Random / As Played
+- **Octave range:** 1–4 octaves
+- **Tracks held MIDI notes** from keyboard input
+- Toggle **ARP** button in the sequencer control bar
+
+### Transport
+
+- **DAW SYNC** — reads BPM and play state from the DAW transport (Bitwig, Ableton, etc.)
+- **FREE** mode — set your own BPM with the numeric display
+- Play/Stop buttons with per-lane step position reset
+
+---
+
+## Effects
+
+Access via the **EFFECTS** tab. All effects are post-synth in series: Delay → Chorus → Reverb. Turn any WET knob above 0 to activate.
+
+| Effect | Controls | Notes |
+|--------|----------|-------|
+| **Reverb** | Room, Damp, Width, Wet | JUCE DSP Reverb |
+| **Delay** | Time (1–2000ms), Feedback, Wet | Stereo ring-buffer delay |
+| **Chorus** | Rate (0.1–8 Hz), Depth, Wet | JUCE DSP Chorus |
 
 ---
 
 ## Factory Presets
 
-70 presets organized into 9 categories, accessible from the browser at the top of the UI:
+70 presets in 9 categories, browser in the header bar:
 
-| Category | Count | Highlights |
-|----------|-------|------------|
-| **Bass** | 10 | Dark Saw, Acid, Reese, Pluck, 808 Sub, Growl, Wobble, FM, Distorted, Brass |
-| **Lead** | 10 | Super Saw, Screaming, Moog, Digital Stab, Vocal, Brass, Pluck, Saw Stack, Wide, FM |
-| **Keys** | 8 | Electric Piano, Rhodes, Vibraphone, Clavinet, Wurlitzer, Bell Keys, Crystal, Marimba |
-| **Pads** | 8 | String, Choir, Space, Warm, Brass, Organ, Glass, Dream |
+| Category | Count | Examples |
+|----------|-------|---------|
+| **Bass** | 10 | Dark Saw, Acid, Reese, 808 Sub, Growl, Wobble, FM, Distorted |
+| **Lead** | 10 | Super Saw, Screaming, Moog, Vocal, Brass, Saw Stack, Wide, FM |
+| **Keys** | 8 | Electric Piano, Rhodes, Vibraphone, Clavinet, Bell Keys, Crystal |
+| **Pads** | 8 | String, Choir, Space, Warm, Brass, Glass, Dream |
 | **Organ** | 6 | Full, Jazz, Rock, Gospel, Pipe, Drawbar Flute |
 | **Pluck** | 6 | Classic, Harp, Nylon Guitar, Koto, Banjo, Bass Guitar |
 | **Arp** | 8 | Acid, Digital, Crystal, Brass, Pluck, Vocal, Glassy, Organ |
-| **Drums** | 9 | Kick, Snare, Hi-Hat (open+closed), Tom, Clap, Cowbell, Rimshot, Perc Block |
-| **Special** | 5 | Theremin, Alien Voice, Formant Sweep, Drone, Harmonic Series, Goth Bells, Sweep Pad |
-
-`<` / `>` arrows navigate through all 70 presets globally.
+| **Drums** | 9 | Kick, Snare, Hi-Hat (open+closed), Tom, Clap, Cowbell, Rimshot |
+| **Special** | 5 | Theremin, Alien Voice, Drone, Harmonic Series, Goth Bells |
 
 ---
 
 ## Signal Flow
 
 ```
-OSC 1 ──┐
-OSC 2 ──┼──► [Mix] ──► [Ladder Filter] ──► [Amp Env] ──► [Master Gain] ──► Out
-OSC 3 ──┘              [SVF Filter   ]      ↑
-                                         [Filter Env]
-         LFO 1 ──► mod targets
-         LFO 2 ──► mod targets
+MIDI keyboard ──┐
+Sequencer/Arp ──┤──► SynthEngine (16 voices) ──► Delay ──► Chorus ──► Reverb ──► Out
+                │         │
+                │    OSC 1+2+3 (Wavetable)
+                │    Ladder Filter + SVF
+                │    Amp Env + Filter Env
+                └    LFO 1 + LFO 2
 ```
-
-Each oscillator: **Wavetable bank** + **Morph** + Tune + Fine + Level + FM + Unison (1–8 voices) + Detune
 
 ---
 
@@ -97,133 +151,112 @@ Each oscillator: **Wavetable bank** + **Morph** + Tune + Fine + Level + FM + Uni
 ### Oscillators (× 3)
 | Parameter | Range | Description |
 |-----------|-------|-------------|
-| WAVEFORM | 6+ banks | Bank selector — `< >` arrows or `↑` to load a custom WAV |
-| MORPH | 0–1 | Sweeps through 8 frames within the selected bank |
-| TUNE | ±24 st | Coarse pitch offset in semitones |
-| FINE | ±100 c | Fine pitch offset in cents |
-| LEVEL | 0–1 | Oscillator output level |
-| FM | 0–1 | FM modulation amount to next oscillator |
-| UNISON | 1–8 | Number of unison voices |
-| DETUNE | 0–1 | Unison voice spread |
+| WAVEFORM | 6+ banks | `< >` to cycle banks, `↑` to load custom WAV/AIFF |
+| MORPH | 0–1 | Sweeps through 8 frames within the bank |
+| TUNE | ±24 st | Coarse pitch |
+| FINE | ±100 c | Fine pitch |
+| LEVEL | 0–1 | Oscillator mix level |
+| FM | 0–1 | FM into next oscillator |
+| UNISON | 1–8 | Unison voice count |
+| DETUNE | 0–1 | Unison spread |
 
 ### Filter
 | Parameter | Range | Description |
 |-----------|-------|-------------|
-| TYPE | 5 modes | Ladder LP24, Ladder LP12, Ladder HP24, SVF LP, SVF BP |
-| CUTOFF | 20–20k Hz | Filter cutoff frequency |
-| RESONANCE | 0–1 | Filter resonance / self-oscillation |
+| TYPE | 5 modes | Ladder LP24, LP12, HP24 · SVF LP, BP |
+| CUTOFF | 20–20k Hz | Cutoff frequency |
+| RESONANCE | 0–1 | Self-oscillation |
 | DRIVE | 1–8× | Pre-filter saturation |
-| ENV AMT | −1–+1 | Filter envelope modulation depth |
+| ENV AMT | −1–+1 | Filter envelope depth |
 
-### Envelopes
-| Parameter | Range | Description |
-|-----------|-------|-------------|
-| ATTACK | 0.1–10,000 ms | Attack time |
-| DECAY | 0.1–10,000 ms | Decay time |
-| SUSTAIN | 0–1 | Sustain level |
-| RELEASE | 0.1–10,000 ms | Release time |
-| CURVE *(amp only)* | −1–+1 | Envelope curve shape |
+### Envelopes (Amp + Filter)
+ADSR with curve shaping. Live ADSR visualizer displays the current shape.
 
 ### LFOs (× 2)
-| Parameter | Range | Description |
-|-----------|-------|-------------|
-| SHAPE | 7 shapes | Sine, Triangle, Saw, Rev Saw, Square, S&H, Smooth Rand |
-| RATE | 0.01–30 Hz | LFO frequency |
-| DEPTH | 0–1 | Modulation depth |
-| PHASE *(LFO 1)* | 0–1 | LFO start phase offset |
+7 shapes: Sine · Triangle · Saw · Rev Saw · Square · S&H · Smooth Random
 
-### Master
-| Parameter | Range | Description |
-|-----------|-------|-------------|
-| VOLUME | 0–1 | Master output gain |
-| GLIDE | 0–5000 ms | Portamento time |
+### Effects
+Reverb (room/damp/width/wet) · Delay (time/feedback/wet) · Chorus (rate/depth/wet)
 
 ---
 
 ## UI
 
-- **Size:** 1100 × 700 px (resizable)
-- **Header bar:** title + preset browser (category + name dropdowns + `<` `>` navigation)
-- **OSCILLATORS section:** 3 strips — each with live waveform oscilloscope + bank nav + `↑` load button + 7 labeled knobs
-- **FILTER section:** type dropdown + 4 knobs
-- **AMP ENVELOPE / FILTER ENVELOPE:** ADSR knobs, color-coded green / amber
-- **LFO 1 / LFO 2:** shape dropdown + rate/depth/phase knobs
-- **MASTER:** volume + glide
+Three tabs in the content area:
 
-The wavetable display updates in real-time as you turn the MORPH knob, rendering the interpolated frame with a 3-pass glow effect using the same algorithm as the audio engine.
+- **SYNTH** — Oscillators, Filter, Envelopes, LFOs, Master
+- **EFFECTS** — Reverb, Delay, Chorus
+- **SEQUENCER** — Step grid, lane controls, arpeggiator, transport
+
+Header bar: title · preset browser (category + name + `< >`) · version + branding
 
 ---
 
 ## Build
 
 ```bash
-# Configure (downloads JUCE automatically via CMake FetchContent)
+# Configure (downloads JUCE via CMake FetchContent)
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
 # Build
 cmake --build build --config Release
 
-# Output locations
 # VST3: build/Source/BombSynth_artefacts/Release/VST3/Bomb Synth.vst3
 # AU:   build/Source/BombSynth_artefacts/Release/AU/Bomb Synth.component
 ```
 
 ### Prerequisites
-- CMake 3.21+
-- C++17 compiler
-  - macOS: Xcode Command Line Tools (`xcode-select --install`)
-  - Windows: Visual Studio 2019+ with C++ workload
-  - Linux: GCC 9+ or Clang 10+
-- Linux extra deps:
-  ```bash
-  sudo apt-get install libasound2-dev libjack-jackd2-dev \
-    libx11-dev libxcomposite-dev libxcursor-dev libxrandr-dev \
-    libfreetype6-dev libwebkit2gtk-4.1-dev
-  ```
+- CMake 3.21+  ·  C++17 compiler
+- macOS: `xcode-select --install`
+- Windows: Visual Studio 2019+ with C++ workload
+- Linux: `sudo apt-get install libasound2-dev libjack-jackd2-dev libx11-dev libxcomposite-dev libxrandr-dev libfreetype6-dev libwebkit2gtk-4.1-dev`
 
 ---
 
 ## Architecture
 
-See **[SPEC.md](SPEC.md)** for the full technical specification.
+See **[SPEC.md](SPEC.md)** for full DSP notes, class hierarchy, and signal flow diagrams.
 
 ### Key Classes
 
 | Class | Role |
 |-------|------|
-| `SynthEngine` | 16-voice polyphony, voice allocation, MIDI dispatch |
-| `Voice` | Per-voice: 3× WavetableOscillator + LadderFilter + SVFFilter + 2× ADSR |
-| `WavetableBankLibrary` | Singleton: built-in banks + user-loaded banks, thread-safe addUserBank() |
+| `SynthEngine` | 16-voice polyphony, MIDI dispatch, voice stealing |
+| `Voice` | 3× WavetableOscillator + LadderFilter + SVFFilter + 2× ADSR |
+| `WavetableBankLibrary` | Singleton: 6 built-in banks + user-loaded banks, thread-safe |
 | `WavetableOscillator` | Phase accumulator + bilinear frame interpolation |
-| `AnalogOscillator` | PolyBLEP bandlimited (kept for legacy/aux use) |
-| `LadderFilter` | Huovilainen 4-pole Moog, 2× oversampled nonlinear stages |
+| `LadderFilter` | Huovilainen 4-pole Moog, 2× oversampled |
 | `SVFFilter` | State-variable LP/HP/BP/Notch |
-| `ADSR` | Exponential attack/decay/release with curve shaping |
-| `LFO` | 7 shapes + tempo sync + fade-in |
-| `ModMatrix` | Block-rate source→destination routing |
-| `WavetableDisplay` | JUCE Component: oscilloscope viz, bank nav, load button |
-| `PresetManager` | 70 factory presets, category/name lookup, APVTS apply |
+| `Sequencer` | Polyrhythmic step engine, arp, scale quantization, DAW sync |
+| `SequencerPanel` | Full sequencer/arp UI with step grid and detail editor |
+| `WavetableDisplay` | Live oscilloscope per oscillator, bank nav, load button |
+| `EnvelopeDisplay` | Animated ADSR shape visualizer |
+| `PresetManager` | 70 factory presets, category browser, APVTS apply |
 
 ---
 
 ## Changelog
 
+### v0.4.0 (March 2026)
+- **Step sequencer** — 4 polyrhythmic lanes, per-step probability, microtiming, gate length
+- **Arpeggiator** — Up/Down/UpDown/Random/As Played, 1–4 octave range
+- **Scale quantization** — 12 scales, snaps all sequencer notes
+- **SEQUENCER tab** added alongside SYNTH / EFFECTS
+
 ### v0.3.0 (March 2026)
-- **User wavetable loading** — `↑` button on each oscillator display opens a file browser; supports WAV and AIFF; single-cycle and multi-frame formats; up to 26 user banks per session
-- **70 factory presets** — Bass, Lead, Keys, Pads, Organ, Pluck, Arp, Drums, Special
-- **Preset browser** — category + name dropdowns + `< >` global navigation in header bar
-- **Bug fix** — oscilloscope display was hidden by z-order issue (section panel painted on top of oscillator strips)
+- **Effects tab** — Reverb, Delay, Chorus (10 new params)
+- **Live ADSR visualizers** in Amp and Filter envelope sections
+- **SYNTH / EFFECTS tab bar**
 
 ### v0.2.0 (March 2026)
-- **Wavetable engine:** 6 banks × 8 morphable frames, additive synthesis generation at startup
-- **WavetableDisplay:** live oscilloscope per oscillator — glow rendering, frame dots, bank navigation
-- **Full UI labels:** WAVEFORM header, OSC badge redesign, stacked combo labels
-- **UI expanded:** 1100×700, resizable
+- **Wavetable engine** — 6 banks × 8 morphable frames, additive synthesis
+- **Custom wavetable loading** — `↑` button loads any WAV/AIFF
+- **70 factory presets** + preset browser in header
+- **Oscilloscope display** per oscillator, 3-pass glow
 
 ### v0.1.0 (March 2026)
-- Core architecture: `SynthEngine`, 16-voice polyphony, voice stealing
-- Full DSP: `AnalogOscillator` (PolyBLEP), `LadderFilter` (Huovilainen), `SVFFilter`, `ADSR`, `LFO`, `ModMatrix`
-- Initial labeled UI, VST3 + AU, macOS Universal, GitHub Actions CI
+- Core: `SynthEngine`, 16-voice polyphony, PolyBLEP oscillators, Ladder filter, ADSR, LFOs
+- VST3 + AU, macOS Universal, GitHub Actions CI
 
 ---
 
