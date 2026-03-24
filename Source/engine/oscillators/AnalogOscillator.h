@@ -13,6 +13,7 @@ public:
     void setFMAmount(float amt)        { fmAmount_ = amt; }
     void setFMInput(float sample)      { fmInput_ = sample; }
     void setDrift(float cents)         { drift_ = cents; }
+    void setGain(float g)              { gain_ = g; }
     void setUnisonVoices(int n, float detune, float spread);
     void reset();
 
@@ -31,6 +32,7 @@ private:
     float  pulseWidth_   = 0.5f;
     float  fmAmount_     = 0.f;
     float  fmInput_      = 0.f;
+    float  gain_         = 1.f;
     float  drift_        = 0.f;        // cents
     float  driftValue_   = 0.f;        // current random-walk value
     OscWaveform waveform_ = OscWaveform::Saw;

@@ -1,52 +1,58 @@
 #include "WavetableOscillator.h"
-#include <cmath>
-#include <algorithm>
 
-void WavetableOscillator::prepare(double sr) { sampleRate_ = sr; reset(); }
+void WavetableOscillator::prepare(double sr) {
+    sampleRate_ = sr;
+    // Trigger library init on audio thread prepare (safe: singleton is const after ctor)
+    if (!currentBank_)
+        setBankIndex(bankIdx_);
+}
 
-void WavetableOscillator::reset() { phase_ = 0.f; }
+void WavetableOscillator::reset() {
+    phase_ = 0.0;
+}
+
+void WavetableOscillator::setBankIndex(int idx) {
+    bankIdx_       = juce::jlimit(0, kWTBanks - 1, idx);
+    usingLocalBank_= false;
+    currentBank_   = &WavetableBankLibrary::get().bank(bankIdx_);
+}
 
 void WavetableOscillator::setFrequency(float hz) {
     frequency_ = hz;
-    phaseInc_  = hz / (float)sampleRate_;
+    phaseInc_  = hz / sampleRate_;
+}
+
+void WavetableOscillator::setMorphPosition(float pos01) {
+    morphPos_ = juce::jlimit(0.f, 1.f, pos01);
 }
 
 void WavetableOscillator::loadFrames(const std::vector<std::vector<float>>& frames) {
-    frames_ = frames;
-}
-
-void WavetableOscillator::setMorphPosition(float pos) {
-    if (!frames_.empty())
-        morphPos_ = juce::jlimit(0.f, (float)(frames_.size() - 1), pos);
-}
-
-float WavetableOscillator::interpolateSample(int fA, int fB, float frac, float phase) const {
-    if (frames_.empty()) return 0.f;
-    fA = juce::jlimit(0, (int)frames_.size() - 1, fA);
-    fB = juce::jlimit(0, (int)frames_.size() - 1, fB);
-
-    float idx   = phase * (float)kFrameSize;
-    int   i0    = (int)idx % kFrameSize;
-    int   i1    = (i0 + 1) % kFrameSize;
-    float alpha = idx - (int)idx;
-
-    float sA = frames_[fA][i0] + alpha * (frames_[fA][i1] - frames_[fA][i0]);
-    float sB = frames_[fB][i0] + alpha * (frames_[fB][i1] - frames_[fB][i0]);
-    return sA + frac * (sB - sA);
+    localBank_.frames = {};   // zero all frames
+    for (int fi = 0; fi < (int)frames.size() && fi < kWTFrames; ++fi) {
+        const auto& src = frames[fi];
+        for (int i = 0; i < kWTSize && i < (int)src.size(); ++i)
+            localBank_.frames[fi].data[i] = src[i];
+    }
+    usingLocalBank_ = true;
+    currentBank_    = &localBank_;
 }
 
 float WavetableOscillator::process() {
-    if (frames_.empty()) return 0.f;
-
-    int   frameA = (int)morphPos_;
-    int   frameB = std::min(frameA + 1, (int)frames_.size() - 1);
-    float frac   = morphPos_ - (float)frameA;
-
-    float out = interpolateSample(frameA, frameB, frac, phase_);
-    phase_ = std::fmod(phase_ + phaseInc_, 1.f);
-    return out;
+    if (!currentBank_) return 0.f;
+    float s = currentBank_->getSample((float)phase_, morphPos_) * gain_;
+    phase_ += phaseInc_;
+    if (phase_ >= 1.0) phase_ -= 1.0;
+    return s;
 }
 
 void WavetableOscillator::processBlock(float* out, int n) {
-    for (int i = 0; i < n; ++i) out[i] = process();
+    if (!currentBank_) {
+        std::fill(out, out + n, 0.f);
+        return;
+    }
+    for (int i = 0; i < n; ++i) {
+        out[i] = currentBank_->getSample((float)phase_, morphPos_) * gain_;
+        phase_ += phaseInc_;
+        if (phase_ >= 1.0) phase_ -= 1.0;
+    }
 }

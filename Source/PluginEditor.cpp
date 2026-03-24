@@ -2,7 +2,7 @@
 #include "PluginProcessor.h"
 #include <cmath>
 
-// ─── BombLookAndFeel ─────────────────────────────────────────────────────────
+// ─── BombLookAndFeel ──────────────────────────────────────────────────────────
 BombLookAndFeel::BombLookAndFeel() {
     setColour(juce::Slider::textBoxTextColourId,       BCol::text);
     setColour(juce::Slider::textBoxBackgroundColourId, BCol::knobBg);
@@ -26,14 +26,12 @@ void BombLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int w, i
     const float thick = r * 0.22f;
     const float valAngle = startAngle + pos * (endAngle - startAngle);
 
-    // Background ring
     juce::Path bg;
     bg.addCentredArc(cx, cy, r, r, 0.f, startAngle, endAngle, true);
     g.setColour(BCol::knobBg);
     g.strokePath(bg, juce::PathStrokeType(thick, juce::PathStrokeType::curved,
                                            juce::PathStrokeType::rounded));
 
-    // Value arc — colour from slider's custom property or fall back to accent
     juce::Colour arc = s.findColour(juce::Slider::rotarySliderFillColourId);
     juce::Path va;
     va.addCentredArc(cx, cy, r, r, 0.f, startAngle, valAngle, true);
@@ -41,7 +39,6 @@ void BombLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int w, i
     g.strokePath(va, juce::PathStrokeType(thick, juce::PathStrokeType::curved,
                                            juce::PathStrokeType::rounded));
 
-    // Glow dot at tip
     const float px = cx + r * std::sin(valAngle);
     const float py = cy - r * std::cos(valAngle);
     g.setColour(arc.withAlpha(0.5f));
@@ -56,7 +53,6 @@ void BombLookAndFeel::drawComboBox(juce::Graphics& g, int w, int h, bool,
     g.fillRoundedRectangle(0.f, 0.f, (float)w, (float)h, 5.f);
     g.setColour(BCol::border);
     g.drawRoundedRectangle(0.5f, 0.5f, w - 1.f, h - 1.f, 5.f, 1.f);
-    // Arrow
     float ax = bx + bw * 0.5f, ay = by + bh * 0.5f;
     juce::Path arrow;
     arrow.addTriangle(ax - 4.f, ay - 2.f, ax + 4.f, ay - 2.f, ax, ay + 3.f);
@@ -79,47 +75,37 @@ void BombLookAndFeel::drawLabel(juce::Graphics& g, juce::Label& l) {
 // ─── BKnob ───────────────────────────────────────────────────────────────────
 BKnob::BKnob(const juce::String& name, juce::Colour arcColour) : arcColour_(arcColour) {
     slider.setSliderStyle(juce::Slider::Rotary);
-    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 14);
+    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 58, 14);
     slider.setColour(juce::Slider::rotarySliderFillColourId, arcColour);
     addAndMakeVisible(slider);
 
     label.setText(name, juce::dontSendNotification);
     label.setJustificationType(juce::Justification::centred);
-    label.setFont(juce::Font(9.5f, juce::Font::bold));
+    label.setFont(juce::Font(9.f, juce::Font::bold));
     label.setColour(juce::Label::textColourId, arcColour.withAlpha(0.85f));
     addAndMakeVisible(label);
 }
 
-void BKnob::setArcColour(juce::Colour c) {
-    arcColour_ = c;
-    slider.setColour(juce::Slider::rotarySliderFillColourId, c);
-    label.setColour(juce::Label::textColourId, c.withAlpha(0.85f));
-}
-
 void BKnob::resized() {
     auto b = getLocalBounds();
-    label.setBounds(b.removeFromBottom(14));
+    label.setBounds(b.removeFromBottom(13));
     slider.setBounds(b);
 }
 
-// ─── SectionPanel ────────────────────────────────────────────────────────────
+// ─── SectionPanel ─────────────────────────────────────────────────────────────
 SectionPanel::SectionPanel(const juce::String& title, juce::Colour hc)
     : title_(title), headerColour_(hc) {}
 
 void SectionPanel::paint(juce::Graphics& g) {
     auto b = getLocalBounds().toFloat();
-    // Background
     g.setColour(BCol::section);
     g.fillRoundedRectangle(b, 8.f);
-    // Border
     g.setColour(headerColour_.withAlpha(0.35f));
     g.drawRoundedRectangle(b.reduced(0.5f), 8.f, 1.f);
-    // Header bar
-    juce::Path header;
-    header.addRoundedRectangle(b.getX(), b.getY(), b.getWidth(), 20.f, 8.f, 8.f, true, true, false, false);
+    juce::Path hdr;
+    hdr.addRoundedRectangle(b.getX(), b.getY(), b.getWidth(), 20.f, 8.f, 8.f, true, true, false, false);
     g.setColour(headerColour_.withAlpha(0.15f));
-    g.fillPath(header);
-    // Title text
+    g.fillPath(hdr);
     g.setColour(headerColour_);
     g.setFont(juce::Font(9.5f, juce::Font::bold));
     g.drawText(title_, (int)b.getX() + 8, (int)b.getY(), (int)b.getWidth() - 16, 20,
@@ -130,77 +116,106 @@ juce::Rectangle<int> SectionPanel::getContentArea() const {
     return getLocalBounds().reduced(6).withTrimmedTop(20);
 }
 
-// ─── OscStrip ────────────────────────────────────────────────────────────────
+// ─── OscStrip ─────────────────────────────────────────────────────────────────
 OscStrip::OscStrip(int idx) : index_(idx) {
-    oscLabel.setText("OSC " + juce::String(idx), juce::dontSendNotification);
-    oscLabel.setFont(juce::Font(11.f, juce::Font::bold));
-    oscLabel.setColour(juce::Label::textColourId, BCol::accent2);
-    oscLabel.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(oscLabel);
-
-    for (auto& item : { std::pair<int,const char*>{1,"Sine"}, {2,"Saw"}, {3,"Square"},
-                         {4,"Triangle"}, {5,"Saw+Tri"} })
-        waveBox.addItem(item.second, item.first);
-    waveBox.setSelectedId(2, juce::dontSendNotification);
-    addAndMakeVisible(waveBox);
-
-    for (auto* k : { &tuneKnob, &fineKnob, &levelKnob, &fmKnob, &unisonKnob, &detuneKnob })
+    addAndMakeVisible(display);
+    for (auto* k : { &morphKnob, &tuneKnob, &fineKnob, &levelKnob,
+                      &fmKnob, &unisonKnob, &detuneKnob })
         addAndMakeVisible(k);
+
+    morphKnob.slider.addListener(this);
+}
+
+OscStrip::~OscStrip() {
+    morphKnob.slider.removeListener(this);
+}
+
+void OscStrip::sliderValueChanged(juce::Slider* s) {
+    if (s == &morphKnob.slider)
+        display.setMorphPos((float)morphKnob.slider.getValue());
 }
 
 void OscStrip::paint(juce::Graphics& g) {
-    // Subtle divider line at bottom
-    g.setColour(BCol::border);
-    g.drawHorizontalLine(getHeight() - 1, 0.f, (float)getWidth());
+    // OSC index label drawn on the left
+    juce::Colour labelCol = BCol::accent2;
+    g.setFont(juce::Font(10.5f, juce::Font::bold));
+    g.setColour(labelCol);
+    g.drawText("OSC " + juce::String(index_),
+               0, 0, kLabelW, getHeight(), juce::Justification::centred);
+
+    // Subtle row divider
+    if (index_ < 3) {
+        g.setColour(BCol::border);
+        g.drawHorizontalLine(getHeight() - 1, 0.f, (float)getWidth());
+    }
 }
 
 void OscStrip::resized() {
-    auto b = getLocalBounds().reduced(2, 0);
-    // Label (left)
-    oscLabel.setBounds(b.removeFromLeft(42));
-    // Waveform combo
-    waveBox.setBounds(b.removeFromLeft(80).withSizeKeepingCentre(78, 22));
-    b.removeFromLeft(4);
-    // Knobs
-    const int kw = (b.getWidth() - 20) / 6;
-    for (auto* k : { &tuneKnob, &fineKnob, &levelKnob, &fmKnob, &unisonKnob, &detuneKnob }) {
+    auto b = getLocalBounds().reduced(0, 2);
+
+    // OSC label occupies the left
+    b.removeFromLeft(kLabelW);
+
+    // Wavetable display
+    display.setBounds(b.removeFromLeft(kDisplayW));
+    b.removeFromLeft(6);
+
+    // 7 knobs share the remaining width equally
+    BKnob* knobs[] = { &morphKnob, &tuneKnob, &fineKnob,
+                        &levelKnob, &fmKnob, &unisonKnob, &detuneKnob };
+    const int kw = (b.getWidth() - 6 * 4) / 7;
+    for (auto* k : knobs) {
         k->setBounds(b.removeFromLeft(kw));
         b.removeFromLeft(4);
     }
 }
 
-// ─── Main Editor ─────────────────────────────────────────────────────────────
+// ─── Main Editor ──────────────────────────────────────────────────────────────
 BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProcessor& p)
     : juce::AudioProcessorEditor(&p), proc_(p)
 {
     setLookAndFeel(&laf_);
-    setSize(1100, 680);
+    setSize(1100, 700);
     setResizable(true, true);
 
-    // Logo
     int ls = 0;
     auto* ld = BinaryData::getNamedResource("logo_png", ls);
     if (ld && ls > 0) logo_ = juce::ImageFileFormat::loadFrom(ld, ls);
 
     auto& par = proc_.parameters();
 
-    // ── OSC attachments ──────────────────────────────────────────────────────
-    static const char* oscWaveIds[3]   = {"osc1_wave","osc2_wave","osc3_wave"};
-    static const char* oscTuneIds[3]   = {"osc1_tune","osc2_tune","osc3_tune"};
-    static const char* oscFineIds[3]   = {"osc1_fine","osc2_fine","osc3_fine"};
-    static const char* oscLevelIds[3]  = {"osc1_level","osc2_level","osc3_level"};
-    static const char* oscFmIds[3]     = {"osc1_fm","osc2_fm","osc3_fm"};
-    static const char* oscUniIds[3]    = {"osc1_uni","osc2_uni","osc3_uni"};
-    static const char* oscDetuneIds[3] = {"osc1_detune","osc2_detune","osc3_detune"};
+    // ── OSC attachments + display callbacks ──────────────────────────────────
+    static const char* morphIds[3]  = {"osc1_morph","osc2_morph","osc3_morph"};
+    static const char* tuneIds[3]   = {"osc1_tune", "osc2_tune", "osc3_tune" };
+    static const char* fineIds[3]   = {"osc1_fine", "osc2_fine", "osc3_fine" };
+    static const char* levelIds[3]  = {"osc1_level","osc2_level","osc3_level"};
+    static const char* fmIds[3]     = {"osc1_fm",   "osc2_fm",   "osc3_fm"  };
+    static const char* uniIds[3]    = {"osc1_uni",  "osc2_uni",  "osc3_uni" };
+    static const char* detIds[3]    = {"osc1_detune","osc2_detune","osc3_detune"};
+    static const char* bankIds[3]   = {"osc1_wave", "osc2_wave", "osc3_wave"};
 
     for (int i = 0; i < 3; ++i) {
-        oscWaveAtt_  [i] = std::make_unique<IA>(par, oscWaveIds[i],   oscs_[i].waveBox);
-        oscTuneAtt_  [i] = std::make_unique<SA>(par, oscTuneIds[i],   oscs_[i].tuneKnob.slider);
-        oscFineAtt_  [i] = std::make_unique<SA>(par, oscFineIds[i],   oscs_[i].fineKnob.slider);
-        oscLevelAtt_ [i] = std::make_unique<SA>(par, oscLevelIds[i],  oscs_[i].levelKnob.slider);
-        oscFmAtt_    [i] = std::make_unique<SA>(par, oscFmIds[i],     oscs_[i].fmKnob.slider);
-        oscUniAtt_   [i] = std::make_unique<SA>(par, oscUniIds[i],    oscs_[i].unisonKnob.slider);
-        oscDetuneAtt_[i] = std::make_unique<SA>(par, oscDetuneIds[i], oscs_[i].detuneKnob.slider);
+        oscMorphAtt_ [i] = std::make_unique<SA>(par, morphIds[i], oscs_[i].morphKnob.slider);
+        oscTuneAtt_  [i] = std::make_unique<SA>(par, tuneIds[i],  oscs_[i].tuneKnob.slider);
+        oscFineAtt_  [i] = std::make_unique<SA>(par, fineIds[i],  oscs_[i].fineKnob.slider);
+        oscLevelAtt_ [i] = std::make_unique<SA>(par, levelIds[i], oscs_[i].levelKnob.slider);
+        oscFmAtt_    [i] = std::make_unique<SA>(par, fmIds[i],    oscs_[i].fmKnob.slider);
+        oscUniAtt_   [i] = std::make_unique<SA>(par, uniIds[i],   oscs_[i].unisonKnob.slider);
+        oscDetuneAtt_[i] = std::make_unique<SA>(par, detIds[i],   oscs_[i].detuneKnob.slider);
+
+        // Initialise display bank from stored param
+        int storedBank = (int)par.getRawParameterValue(bankIds[i])->load();
+        oscs_[i].display.setBankIndex(storedBank);
+
+        // Wire display navigation → APVTS
+        const juce::String bankParamId = bankIds[i];
+        oscs_[i].display.onBankChanged = [this, bankParamId](int newBank) {
+            if (auto* param = proc_.parameters().getParameter(bankParamId)) {
+                auto& range = dynamic_cast<juce::RangedAudioParameter*>(param)->getNormalisableRange();
+                param->setValueNotifyingHost(range.convertTo0to1((float)newBank));
+            }
+        };
+
         addAndMakeVisible(oscs_[i]);
     }
     addAndMakeVisible(oscSection_);
@@ -248,8 +263,8 @@ BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProce
         addAndMakeVisible(k);
 
     // ── LFO 1 ────────────────────────────────────────────────────────────────
-    for (auto& item : { std::pair<int,const char*>{1,"Sine"}, {2,"Triangle"}, {3,"Saw"},
-                         {4,"Rev Saw"}, {5,"Square"}, {6,"S & H"}, {7,"Smooth Rand"} })
+    for (auto& item : { std::pair<int,const char*>{1,"Sine"},{2,"Triangle"},{3,"Saw"},
+                         {4,"Rev Saw"},{5,"Square"},{6,"S & H"},{7,"Smooth"} })
         lfo1ShapeBox_.addItem(item.second, item.first);
     lfo1ShapeLabel_.setText("SHAPE", juce::dontSendNotification);
     lfo1ShapeLabel_.setFont(juce::Font(9.5f, juce::Font::bold));
@@ -268,8 +283,8 @@ BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProce
         addAndMakeVisible(k);
 
     // ── LFO 2 ────────────────────────────────────────────────────────────────
-    for (auto& item : { std::pair<int,const char*>{1,"Sine"}, {2,"Triangle"}, {3,"Saw"},
-                         {4,"Rev Saw"}, {5,"Square"}, {6,"S & H"}, {7,"Smooth Rand"} })
+    for (auto& item : { std::pair<int,const char*>{1,"Sine"},{2,"Triangle"},{3,"Saw"},
+                         {4,"Rev Saw"},{5,"Square"},{6,"S & H"},{7,"Smooth"} })
         lfo2ShapeBox_.addItem(item.second, item.first);
     lfo2ShapeLabel_.setText("SHAPE", juce::dontSendNotification);
     lfo2ShapeLabel_.setFont(juce::Font(9.5f, juce::Font::bold));
@@ -302,14 +317,12 @@ BombSynthAudioProcessorEditor::~BombSynthAudioProcessorEditor() {
 void BombSynthAudioProcessorEditor::paint(juce::Graphics& g) {
     g.fillAll(BCol::bg);
 
-    // ── Header bar ───────────────────────────────────────────────────────────
     const int hH = 50;
     g.setColour(BCol::panel);
     g.fillRect(0, 0, getWidth(), hH);
     g.setColour(BCol::accent.withAlpha(0.6f));
     g.drawHorizontalLine(hH, 0.f, (float)getWidth());
 
-    // Logo
     if (logo_.isValid()) {
         const int ls = 34, lx = getWidth() - ls - 14, ly = (hH - ls) / 2;
         g.setColour(juce::Colours::white.withAlpha(0.9f));
@@ -317,84 +330,77 @@ void BombSynthAudioProcessorEditor::paint(juce::Graphics& g) {
         g.drawImage(logo_, lx, ly, ls, ls, 0, 0, logo_.getWidth(), logo_.getHeight());
     }
 
-    // Title
     g.setFont(juce::Font(22.f, juce::Font::bold));
     g.setColour(BCol::accent);
     g.drawText("BOMB SYNTH", 14, 0, 320, hH, juce::Justification::centredLeft);
 
-    // Subtitle
     g.setFont(juce::Font(10.f));
     g.setColour(BCol::textDim);
-    g.drawText("Hybrid Synthesizer  |  v0.1.0  |  Illbomb",
+    g.drawText("Hybrid Synthesizer  |  v0.2.0  |  Illbomb",
                14, 0, getWidth() - 60, hH, juce::Justification::centredRight);
 }
 
 void BombSynthAudioProcessorEditor::resized() {
-    const int hH  = 50;   // header
+    const int hH  = 50;
     const int pad = 8;
     auto area = getLocalBounds().withTrimmedTop(hH).reduced(pad);
     const int W = area.getWidth();
 
-    // ── Row 1: Oscillators (full width) ─────────────────────────────────────
-    auto row1 = area.removeFromTop(185);
+    // ── Row 1: Oscillators ────────────────────────────────────────────────────
+    auto row1 = area.removeFromTop(220);
     oscSection_.setBounds(row1);
     auto oscContent = oscSection_.getContentArea().translated(row1.getX(), row1.getY());
-    const int oscH = oscContent.getHeight() / 3;
+    const int oscStripH = oscContent.getHeight() / 3;
     for (auto& osc : oscs_)
-        osc.setBounds(oscContent.removeFromTop(oscH));
+        osc.setBounds(oscContent.removeFromTop(oscStripH));
 
     area.removeFromTop(pad);
 
-    // ── Row 2: Filter + Amp Env + Filter Env ────────────────────────────────
-    auto row2 = area.removeFromTop(160);
+    // ── Row 2: Filter  |  Amp Env  |  Filter Env ──────────────────────────────
+    auto row2 = area.removeFromTop(165);
 
-    // Filter (left, 30% width)
+    // Filter (27%)
     int filterW = (int)(W * 0.27f);
-    auto filterBounds = row2.removeFromLeft(filterW);
-    filterSection_.setBounds(filterBounds);
-    auto fc = filterSection_.getContentArea().translated(filterBounds.getX(), filterBounds.getY());
-    // Type combo top
+    auto filterB = row2.removeFromLeft(filterW);
+    filterSection_.setBounds(filterB);
+    auto fc = filterSection_.getContentArea().translated(filterB.getX(), filterB.getY());
     auto typeRow = fc.removeFromTop(32);
     filterTypeLabel_.setBounds(typeRow.removeFromLeft(44));
     filterTypeBox_  .setBounds(typeRow.withTrimmedRight(4));
-    // Knobs below
     const int fkW = fc.getWidth() / 4;
-    for (auto* k : { &cutoffKnob_, &resKnob_, &driveKnob_, &envAmtKnob_ }) {
+    for (auto* k : { &cutoffKnob_, &resKnob_, &driveKnob_, &envAmtKnob_ })
         k->setBounds(fc.removeFromLeft(fkW));
-    }
 
     row2.removeFromLeft(pad);
 
-    // Amp env (middle, ~36%)
+    // Amp env (36%)
     int ampW = (int)(W * 0.355f);
-    auto ampBounds = row2.removeFromLeft(ampW);
-    ampEnvSection_.setBounds(ampBounds);
-    auto ac = ampEnvSection_.getContentArea().translated(ampBounds.getX(), ampBounds.getY());
+    auto ampB = row2.removeFromLeft(ampW);
+    ampEnvSection_.setBounds(ampB);
+    auto ac = ampEnvSection_.getContentArea().translated(ampB.getX(), ampB.getY());
     const int akW = ac.getWidth() / 5;
     for (auto* k : { &ampAttKnob_, &ampDecKnob_, &ampSusKnob_, &ampRelKnob_, &ampCrvKnob_ })
         k->setBounds(ac.removeFromLeft(akW));
 
     row2.removeFromLeft(pad);
 
-    // Filter env (right, remainder)
-    auto fenvBounds = row2;
-    filterEnvSection_.setBounds(fenvBounds);
-    auto fec = filterEnvSection_.getContentArea().translated(fenvBounds.getX(), fenvBounds.getY());
+    // Filter env (remainder)
+    filterEnvSection_.setBounds(row2);
+    auto fec = filterEnvSection_.getContentArea().translated(row2.getX(), row2.getY());
     const int fekW = fec.getWidth() / 4;
     for (auto* k : { &fEnvAttKnob_, &fEnvDecKnob_, &fEnvSusKnob_, &fEnvRelKnob_ })
         k->setBounds(fec.removeFromLeft(fekW));
 
     area.removeFromTop(pad);
 
-    // ── Row 3: LFO 1 + LFO 2 + Master ──────────────────────────────────────
-    auto row3 = area.removeFromTop(140);
-    int lfoW = (int)(W * 0.37f);
-    int masterW = W - lfoW * 2 - pad * 2;
+    // ── Row 3: LFO 1  |  LFO 2  |  Master ────────────────────────────────────
+    auto row3 = area.removeFromTop(145);
+    const int lfoW = (int)(W * 0.37f);
 
     // LFO 1
-    auto lfo1Bounds = row3.removeFromLeft(lfoW);
-    lfo1Section_.setBounds(lfo1Bounds);
-    auto l1c = lfo1Section_.getContentArea().translated(lfo1Bounds.getX(), lfo1Bounds.getY());
+    auto lfo1B = row3.removeFromLeft(lfoW);
+    lfo1Section_.setBounds(lfo1B);
+    auto l1c = lfo1Section_.getContentArea().translated(lfo1B.getX(), lfo1B.getY());
     auto l1top = l1c.removeFromTop(34);
     lfo1ShapeLabel_.setBounds(l1top.removeFromLeft(44));
     lfo1ShapeBox_  .setBounds(l1top.withTrimmedRight(4));
@@ -405,9 +411,9 @@ void BombSynthAudioProcessorEditor::resized() {
     row3.removeFromLeft(pad);
 
     // LFO 2
-    auto lfo2Bounds = row3.removeFromLeft(lfoW);
-    lfo2Section_.setBounds(lfo2Bounds);
-    auto l2c = lfo2Section_.getContentArea().translated(lfo2Bounds.getX(), lfo2Bounds.getY());
+    auto lfo2B = row3.removeFromLeft(lfoW);
+    lfo2Section_.setBounds(lfo2B);
+    auto l2c = lfo2Section_.getContentArea().translated(lfo2B.getX(), lfo2B.getY());
     auto l2top = l2c.removeFromTop(34);
     lfo2ShapeLabel_.setBounds(l2top.removeFromLeft(44));
     lfo2ShapeBox_  .setBounds(l2top.withTrimmedRight(4));

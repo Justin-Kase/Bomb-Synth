@@ -4,22 +4,19 @@
 juce::AudioProcessorValueTreeState::ParameterLayout BombSynthAudioProcessor::createParameters() {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
 
-    auto ms = [](float lo, float hi, float def) {
-        return std::make_unique<juce::AudioParameterFloat>("", "",
-            juce::NormalisableRange<float>{lo, hi, 0.f, 0.3f}, def);
-    };
-    (void)ms;
-
-    // ── Master ──────────────────────────────────────────────────────────────
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("master_gain",  "Master Volume",
+    // ── Master ───────────────────────────────────────────────────────────────
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("master_gain", "Master Volume",
         juce::NormalisableRange<float>{0.f, 1.f}, 0.8f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("glide_time",   "Glide Time",
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("glide_time",  "Glide Time",
         juce::NormalisableRange<float>{0.f, 5000.f, 0.f, 0.3f}, 0.f));
 
-    // ── Oscillators (3) ─────────────────────────────────────────────────────
+    // ── Oscillators ──────────────────────────────────────────────────────────
     for (int i = 1; i <= 3; ++i) {
-        auto n = juce::String(i);
-        p.push_back(std::make_unique<juce::AudioParameterInt>  ("osc"+n+"_wave",  "OSC "+n+" Wave",   0, 4, i == 1 ? 1 : 0));
+        juce::String n(i);
+        // bank index: 0-5 (replaces old 0-4 wave selector)
+        p.push_back(std::make_unique<juce::AudioParameterInt>  ("osc"+n+"_wave",  "OSC "+n+" Bank",  0, kWTBanks - 1, 0));
+        p.push_back(std::make_unique<juce::AudioParameterFloat>("osc"+n+"_morph", "OSC "+n+" Morph",
+            juce::NormalisableRange<float>{0.f, 1.f}, 0.f));
         p.push_back(std::make_unique<juce::AudioParameterFloat>("osc"+n+"_tune",  "OSC "+n+" Tune",
             juce::NormalisableRange<float>{-24.f, 24.f, 1.f}, 0.f));
         p.push_back(std::make_unique<juce::AudioParameterFloat>("osc"+n+"_fine",  "OSC "+n+" Fine",
@@ -88,7 +85,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout BombSynthAudioProcessor::cre
 BombSynthAudioProcessor::BombSynthAudioProcessor()
     : juce::AudioProcessor(BusesProperties()
         .withOutput("Output", juce::AudioChannelSet::stereo(), true))
-{}
+{
+    // Force wavetable library initialisation on the UI thread at load time
+    (void)WavetableBankLibrary::get();
+}
 
 void BombSynthAudioProcessor::prepareToPlay(double sr, int blockSize) {
     engine_.prepare(sr, blockSize);
@@ -104,8 +104,27 @@ bool BombSynthAudioProcessor::isBusesLayoutSupported(const BusesLayout& l) const
 void BombSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::MidiBuffer& midi) {
     juce::ScopedNoDenormals nd;
 
-    auto get = [&](const char* id) { return params_.getRawParameterValue(id)->load(); };
+    auto get  = [&](const char* id)  { return params_.getRawParameterValue(id)->load(); };
+    auto geti = [&](const char* id)  { return (int)params_.getRawParameterValue(id)->load(); };
 
+    // ── Oscillators ──────────────────────────────────────────────────────────
+    static const char* bankIds[3]   = {"osc1_wave","osc2_wave","osc3_wave"};
+    static const char* morphIds[3]  = {"osc1_morph","osc2_morph","osc3_morph"};
+    static const char* levelIds[3]  = {"osc1_level","osc2_level","osc3_level"};
+    static const char* tuneIds[3]   = {"osc1_tune","osc2_tune","osc3_tune"};
+
+    for (int i = 0; i < 3; ++i) {
+        engine_.setOscBankIndex(i, geti(bankIds[i]));
+        engine_.setOscMorphPos (i, get (morphIds[i]));
+        engine_.setOscLevel    (i, get (levelIds[i]));
+        engine_.setOscTune     (i, get (tuneIds[i]));
+    }
+
+    // ── Filter ───────────────────────────────────────────────────────────────
+    engine_.setCutoff   (get("filter_cutoff"));
+    engine_.setResonance(get("filter_res"));
+
+    // ── Envelopes ─────────────────────────────────────────────────────────────
     ADSR::Params amp;
     amp.attackMs  = get("amp_attack");
     amp.decayMs   = get("amp_decay");
@@ -119,11 +138,9 @@ void BombSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::
     fenv.sustain   = get("fenv_sustain");
     fenv.releaseMs = get("fenv_release");
 
-    engine_.setMasterGain(get("master_gain"));
-    engine_.setCutoff(get("filter_cutoff"));
-    engine_.setResonance(get("filter_res"));
-    engine_.setAmpEnvParams(amp);
+    engine_.setAmpEnvParams   (amp);
     engine_.setFilterEnvParams(fenv);
+    engine_.setMasterGain(get("master_gain"));
     engine_.processBlock(buf, midi);
 }
 
@@ -136,7 +153,8 @@ void BombSynthAudioProcessor::getStateInformation(juce::MemoryBlock& d) {
     if (auto x = s.createXml()) copyXmlToBinary(*x, d);
 }
 void BombSynthAudioProcessor::setStateInformation(const void* d, int sz) {
-    std::unique_ptr<juce::XmlElement> x(getXmlFromBinary(d, sz));
-    if (x) params_.replaceState(juce::ValueTree::fromXml(*x));
+    if (auto x = std::unique_ptr<juce::XmlElement>(getXmlFromBinary(d, sz)))
+        params_.replaceState(juce::ValueTree::fromXml(*x));
 }
+
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new BombSynthAudioProcessor(); }

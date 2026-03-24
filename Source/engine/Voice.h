@@ -22,7 +22,7 @@ public:
     bool isActive() const;
     void renderBlock(juce::AudioBuffer<float>& buffer, int startSample, int numSamples);
 
-    // Parameter setters (called from processor per block)
+    // Parameter setters
     void setOscEngine(int idx, OscEngineType t);
     void setAmpEnvParams(const ADSR::Params& p)    { ampEnv_.setParams(p); }
     void setFilterEnvParams(const ADSR::Params& p) { filterEnv_.setParams(p); }
@@ -32,11 +32,17 @@ public:
     void setPan(float pan)       { pan_ = pan; }
     void setGain(float g)        { gain_ = g; }
 
-    int   getMidiNote()  const { return midiNote_; }
-    float getVelocity()  const { return velocity_; }
+    // Wavetable control
+    void setOscBankIndex (int oscIdx, int bankIdx);
+    void setOscMorphPos  (int oscIdx, float morph01);
+    void setOscLevel     (int oscIdx, float level);
+    void setOscTune      (int oscIdx, float semitones);  // coarse detune
+
+    int   getMidiNote() const { return midiNote_; }
+    float getVelocity() const { return velocity_; }
 
 private:
-    float midiNoteToHz(int note) const;
+    float midiNoteToHz(int note, float tuneOffset = 0.f) const;
 
     double sampleRate_  = 44100.0;
     int    blockSize_   = 512;
@@ -46,9 +52,15 @@ private:
     float  gain_        = 1.f;
     FilterRouting filterRouting_ = FilterRouting::Serial;
 
-    std::array<OscEngineType, kNumOscs> oscTypes_ { OscEngineType::Analog,
-                                                     OscEngineType::Analog,
-                                                     OscEngineType::Analog };
+    std::array<OscEngineType, kNumOscs> oscTypes_ {
+        OscEngineType::Wavetable,
+        OscEngineType::Wavetable,
+        OscEngineType::Wavetable
+    };
+    std::array<float, kNumOscs> oscLevels_ { 1.f, 0.f, 0.f };
+    std::array<float, kNumOscs> oscTune_   { 0.f, 0.f, 0.f }; // semitones
+    std::array<int,   kNumOscs> oscBanks_  { -1, -1, -1 };     // -1 = needs init
+
     AnalogOscillator    analogOscs_[kNumOscs];
     WavetableOscillator wavetableOscs_[kNumOscs];
 

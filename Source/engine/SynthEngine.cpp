@@ -1,14 +1,11 @@
 #include "SynthEngine.h"
 
 void SynthEngine::prepare(double sr, int blockSize) {
-    sampleRate_ = sr;
-    blockSize_  = blockSize;
+    sampleRate_ = sr; blockSize_ = blockSize;
     for (auto& v : voices_) v.prepare(sr, blockSize);
 }
 
-void SynthEngine::reset() {
-    for (auto& v : voices_) v.reset();
-}
+void SynthEngine::reset() { for (auto& v : voices_) v.reset(); }
 
 void SynthEngine::setAmpEnvParams(const ADSR::Params& p) {
     ampParams_ = p;
@@ -21,36 +18,44 @@ void SynthEngine::setFilterEnvParams(const ADSR::Params& p) {
 }
 
 void SynthEngine::setCutoff(float hz) {
-    cutoff_ = hz;
     for (auto& v : voices_) v.setCutoff(hz);
 }
 
 void SynthEngine::setResonance(float r) {
-    resonance_ = r;
     for (auto& v : voices_) v.setResonance(r);
 }
 
-Voice* SynthEngine::findFreeVoice(int /*note*/) {
-    for (auto& v : voices_)
-        if (!v.isActive()) return &v;
+void SynthEngine::setOscBankIndex(int oscIdx, int bankIdx) {
+    for (auto& v : voices_) v.setOscBankIndex(oscIdx, bankIdx);
+}
+
+void SynthEngine::setOscMorphPos(int oscIdx, float morph) {
+    for (auto& v : voices_) v.setOscMorphPos(oscIdx, morph);
+}
+
+void SynthEngine::setOscLevel(int oscIdx, float level) {
+    for (auto& v : voices_) v.setOscLevel(oscIdx, level);
+}
+
+void SynthEngine::setOscTune(int oscIdx, float semitones) {
+    for (auto& v : voices_) v.setOscTune(oscIdx, semitones);
+}
+
+Voice* SynthEngine::findFreeVoice(int) {
+    for (auto& v : voices_) if (!v.isActive()) return &v;
     return nullptr;
 }
 
-Voice* SynthEngine::stealVoice(int /*note*/) {
-    // Steal oldest active voice (first in array for now)
-    return &voices_[0];
-}
+Voice* SynthEngine::stealVoice(int) { return &voices_[0]; }
 
 void SynthEngine::handleNoteOn(int note, float vel) {
-    // Same note — steal its own voice first
     for (auto& v : voices_)
-        if (v.isActive() && v.getMidiNote() == note) { v.noteOff(); }
-
+        if (v.isActive() && v.getMidiNote() == note) v.noteOff();
     Voice* v = findFreeVoice(note);
     if (!v) v = stealVoice(note);
     v->reset();
-    v->setCutoff(cutoff_);
-    v->setResonance(resonance_);
+    v->setCutoff(6000.f);
+    v->setResonance(0.f);
     v->setAmpEnvParams(ampParams_);
     v->setFilterEnvParams(filterParams_);
     v->noteOn(note, vel);
@@ -63,31 +68,20 @@ void SynthEngine::handleNoteOff(int note) {
 
 void SynthEngine::processBlock(juce::AudioBuffer<float>& audio, juce::MidiBuffer& midi) {
     audio.clear();
-    int numSamples = audio.getNumSamples();
-    int pos        = 0;
+    int numSamples = audio.getNumSamples(), pos = 0;
 
     for (auto meta : midi) {
         auto msg    = meta.getMessage();
         int  offset = meta.samplePosition;
-
-        // Render up to this MIDI event
         if (offset > pos) {
-            for (auto& v : voices_)
-                v.renderBlock(audio, pos, offset - pos);
+            for (auto& v : voices_) v.renderBlock(audio, pos, offset - pos);
             pos = offset;
         }
-
-        if (msg.isNoteOn())
-            handleNoteOn(msg.getNoteNumber(), msg.getVelocity() / 127.f);
-        else if (msg.isNoteOff())
-            handleNoteOff(msg.getNoteNumber());
+        if (msg.isNoteOn())  handleNoteOn (msg.getNoteNumber(), msg.getVelocity() / 127.f);
+        if (msg.isNoteOff()) handleNoteOff(msg.getNoteNumber());
     }
-
-    // Render remainder
     if (pos < numSamples)
-        for (auto& v : voices_)
-            v.renderBlock(audio, pos, numSamples - pos);
+        for (auto& v : voices_) v.renderBlock(audio, pos, numSamples - pos);
 
-    // Master gain
     audio.applyGain(masterGain_);
 }

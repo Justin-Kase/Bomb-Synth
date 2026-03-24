@@ -2,11 +2,12 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <BinaryData.h>
+#include "ui/WavetableDisplay.h"
 #include <array>
 
 class BombSynthAudioProcessor;
 
-// ─── Shared colours ──────────────────────────────────────────────────────────
+// ─── Colours ─────────────────────────────────────────────────────────────────
 namespace BCol {
     inline const juce::Colour bg      { 0xFF0A0A14 };
     inline const juce::Colour panel   { 0xFF111120 };
@@ -28,7 +29,7 @@ public:
     void drawRotarySlider(juce::Graphics&, int x, int y, int w, int h,
                           float pos, float startAngle, float endAngle,
                           juce::Slider&) override;
-    void drawComboBox(juce::Graphics&, int w, int h, bool isDown,
+    void drawComboBox(juce::Graphics&, int w, int h, bool,
                       int bx, int by, int bw, int bh, juce::ComboBox&) override;
     void positionComboBoxText(juce::ComboBox&, juce::Label&) override;
     void drawLabel(juce::Graphics&, juce::Label&) override;
@@ -39,11 +40,8 @@ class BKnob : public juce::Component {
 public:
     juce::Slider slider;
     juce::Label  label;
-    juce::Label  valueLabel;
-
     explicit BKnob(const juce::String& name, juce::Colour arcColour = BCol::accent);
     void resized() override;
-    void setArcColour(juce::Colour c);
 private:
     juce::Colour arcColour_;
 };
@@ -59,23 +57,30 @@ private:
     juce::Colour headerColour_;
 };
 
-// ─── Oscillator row (one OSC strip) ──────────────────────────────────────────
-class OscStrip : public juce::Component {
+// ─── Oscillator strip (one row per OSC) ──────────────────────────────────────
+class OscStrip : public juce::Component, public juce::Slider::Listener {
 public:
-    juce::Label    oscLabel;
-    juce::ComboBox waveBox;
-    BKnob          tuneKnob   { "TUNE" };
-    BKnob          fineKnob   { "FINE" };
-    BKnob          levelKnob  { "LEVEL" };
-    BKnob          fmKnob     { "FM", BCol::amber };
-    BKnob          unisonKnob { "UNISON", BCol::accent2 };
-    BKnob          detuneKnob { "DETUNE", BCol::accent2 };
+    WavetableDisplay display;
+    BKnob morphKnob  { "MORPH",  BCol::accent2 };
+    BKnob tuneKnob   { "TUNE",   BCol::accent2 };
+    BKnob fineKnob   { "FINE",   BCol::accent2 };
+    BKnob levelKnob  { "LEVEL",  BCol::accent2 };
+    BKnob fmKnob     { "FM",     BCol::amber   };
+    BKnob unisonKnob { "UNISON", BCol::textDim };
+    BKnob detuneKnob { "DETUNE", BCol::textDim };
 
     explicit OscStrip(int index);
+    ~OscStrip() override;
     void resized() override;
     void paint(juce::Graphics&) override;
+
+    // juce::Slider::Listener — updates display morph when knob moves
+    void sliderValueChanged(juce::Slider* s) override;
+
 private:
     int index_;
+    static constexpr int kLabelW   = 38;
+    static constexpr int kDisplayW = 155;
 };
 
 // ─── Main Editor ─────────────────────────────────────────────────────────────
@@ -91,21 +96,21 @@ private:
     BombLookAndFeel laf_;
     juce::Image logo_;
 
-    // ── OSC section ──────────────────────────────────────────────────────────
-    SectionPanel oscSection_   { "OSCILLATORS", BCol::accent2 };
+    // ── OSCs ─────────────────────────────────────────────────────────────────
+    SectionPanel oscSection_ { "OSCILLATORS", BCol::accent2 };
     std::array<OscStrip, 3> oscs_ { OscStrip{1}, OscStrip{2}, OscStrip{3} };
 
-    // ── Filter section ───────────────────────────────────────────────────────
-    SectionPanel filterSection_  { "FILTER", BCol::amber };
-    juce::Label  filterTypeLabel_;
+    // ── Filter ───────────────────────────────────────────────────────────────
+    SectionPanel filterSection_  { "FILTER",  BCol::amber };
+    juce::Label    filterTypeLabel_;
     juce::ComboBox filterTypeBox_;
-    BKnob cutoffKnob_ { "CUTOFF",  BCol::amber };
+    BKnob cutoffKnob_ { "CUTOFF",    BCol::amber };
     BKnob resKnob_    { "RESONANCE", BCol::amber };
-    BKnob driveKnob_  { "DRIVE",   BCol::accent };
-    BKnob envAmtKnob_ { "ENV AMT", BCol::green  };
+    BKnob driveKnob_  { "DRIVE",     BCol::accent };
+    BKnob envAmtKnob_ { "ENV AMT",   BCol::green  };
 
     // ── Amp Envelope ─────────────────────────────────────────────────────────
-    SectionPanel ampEnvSection_ { "AMP ENVELOPE", BCol::green };
+    SectionPanel ampEnvSection_ { "AMP ENVELOPE",    BCol::green };
     BKnob ampAttKnob_ { "ATTACK",  BCol::green };
     BKnob ampDecKnob_ { "DECAY",   BCol::green };
     BKnob ampSusKnob_ { "SUSTAIN", BCol::green };
@@ -136,33 +141,27 @@ private:
 
     // ── Master ───────────────────────────────────────────────────────────────
     SectionPanel masterSection_ { "MASTER", BCol::textDim };
-    BKnob masterVolKnob_  { "VOLUME", BCol::accent };
-    BKnob glideKnob_      { "GLIDE",  BCol::accent2 };
+    BKnob masterVolKnob_ { "VOLUME", BCol::accent };
+    BKnob glideKnob_     { "GLIDE",  BCol::accent2 };
 
     using SA = juce::AudioProcessorValueTreeState::SliderAttachment;
     using IA = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
 
-    // Osc attachments
-    std::array<std::unique_ptr<SA>, 3> oscTuneAtt_, oscFineAtt_, oscLevelAtt_,
-                                        oscFmAtt_, oscUniAtt_, oscDetuneAtt_;
-    std::array<std::unique_ptr<IA>, 3> oscWaveAtt_;
-
+    // OSC knob attachments (no waveBox attachment — display handles bank)
+    std::array<std::unique_ptr<SA>, 3> oscMorphAtt_, oscTuneAtt_, oscFineAtt_,
+                                        oscLevelAtt_, oscFmAtt_, oscUniAtt_, oscDetuneAtt_;
     // Filter
     std::unique_ptr<SA> cutoffAtt_, resAtt_, driveAtt_, envAmtAtt_;
     std::unique_ptr<IA> filterTypeAtt_;
-
     // Amp env
     std::unique_ptr<SA> ampAttAtt_, ampDecAtt_, ampSusAtt_, ampRelAtt_, ampCrvAtt_;
-
     // Filter env
     std::unique_ptr<SA> fEnvAttAtt_, fEnvDecAtt_, fEnvSusAtt_, fEnvRelAtt_;
-
     // LFOs
     std::unique_ptr<SA> lfo1RateAtt_, lfo1DepthAtt_, lfo1PhaseAtt_;
     std::unique_ptr<IA> lfo1ShapeAtt_;
     std::unique_ptr<SA> lfo2RateAtt_, lfo2DepthAtt_;
     std::unique_ptr<IA> lfo2ShapeAtt_;
-
     // Master
     std::unique_ptr<SA> masterVolAtt_, glideAtt_;
 
