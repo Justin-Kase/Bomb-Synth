@@ -187,7 +187,8 @@ void OscStrip::resized() {
 
 // ─── Main Editor ──────────────────────────────────────────────────────────────
 BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProcessor& p)
-    : juce::AudioProcessorEditor(&p), proc_(p)
+    : juce::AudioProcessorEditor(&p), proc_(p),
+      sequencerPanel_(p.sequencer())
 {
     setLookAndFeel(&laf_);
     setSize(1100, 700);
@@ -368,13 +369,24 @@ BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProce
         addAndMakeVisible(b);
     }
     synthTabBtn_.setToggleState(true, juce::dontSendNotification);
-    synthTabBtn_.onClick   = [this] { setTab(Tab::Synth);   };
-    effectsTabBtn_.onClick = [this] { setTab(Tab::Effects); };
+    synthTabBtn_.onClick      = [this] { setTab(Tab::Synth);      };
+    effectsTabBtn_.onClick    = [this] { setTab(Tab::Effects);    };
+    sequencerTabBtn_.onClick  = [this] { setTab(Tab::Sequencer);  };
+
+    sequencerTabBtn_.setColour(juce::TextButton::buttonColourId,    BCol::knobBg);
+    sequencerTabBtn_.setColour(juce::TextButton::buttonOnColourId,  BCol::accent.withAlpha(0.3f));
+    sequencerTabBtn_.setColour(juce::TextButton::textColourOffId,   BCol::textDim);
+    sequencerTabBtn_.setColour(juce::TextButton::textColourOnId,    BCol::accent);
+    sequencerTabBtn_.setClickingTogglesState(false);
+    addAndMakeVisible(sequencerTabBtn_);
+
+    addAndMakeVisible(sequencerPanel_);
+    sequencerPanel_.setVisible(false);
 
     setEffectsVisible(false);
 
     buildPresetBrowser();
-    startTimerHz(20);   // 20 Hz for envelope display updates
+    startTimerHz(20);
 }
 
 BombSynthAudioProcessorEditor::~BombSynthAudioProcessorEditor() {
@@ -401,6 +413,10 @@ void BombSynthAudioProcessorEditor::setSynthVisible(bool v) {
     ampEnvDisplay_.setVisible(v);  fEnvDisplay_.setVisible(v);
 }
 
+void BombSynthAudioProcessorEditor::setSequencerVisible(bool v) {
+    sequencerPanel_.setVisible(v);
+}
+
 void BombSynthAudioProcessorEditor::setEffectsVisible(bool v) {
     reverbSection_.setVisible(v);
     for (auto* k : { &revRoomKnob_, &revDampKnob_, &revWidthKnob_, &revWetKnob_ }) k->setVisible(v);
@@ -412,10 +428,12 @@ void BombSynthAudioProcessorEditor::setEffectsVisible(bool v) {
 
 void BombSynthAudioProcessorEditor::setTab(Tab t) {
     activeTab_ = t;
-    synthTabBtn_  .setToggleState(t == Tab::Synth,   juce::dontSendNotification);
-    effectsTabBtn_.setToggleState(t == Tab::Effects, juce::dontSendNotification);
-    setSynthVisible  (t == Tab::Synth);
-    setEffectsVisible(t == Tab::Effects);
+    synthTabBtn_     .setToggleState(t == Tab::Synth,      juce::dontSendNotification);
+    effectsTabBtn_   .setToggleState(t == Tab::Effects,    juce::dontSendNotification);
+    sequencerTabBtn_ .setToggleState(t == Tab::Sequencer,  juce::dontSendNotification);
+    setSynthVisible    (t == Tab::Synth);
+    setEffectsVisible  (t == Tab::Effects);
+    setSequencerVisible(t == Tab::Sequencer);
     resized();
     repaint();
 }
@@ -607,16 +625,21 @@ void BombSynthAudioProcessorEditor::resized() {
 
     // ── Tab bar ───────────────────────────────────────────────────────────────
     {
-        const int tabH = 28, tabW = 90, gap = 4;
-        int tx = pad;
-        int ty = hH + 2;
-        synthTabBtn_  .setBounds(tx,          ty, tabW, tabH);
-        effectsTabBtn_.setBounds(tx + tabW + gap, ty, tabW, tabH);
+        const int tabH = 28, tabW = 90, seqTabW = 110, gap = 4;
+        int tx = pad, ty = hH + 2;
+        synthTabBtn_     .setBounds(tx,                         ty, tabW,    tabH);
+        effectsTabBtn_   .setBounds(tx + tabW + gap,            ty, tabW,    tabH);
+        sequencerTabBtn_ .setBounds(tx + (tabW + gap) * 2,      ty, seqTabW, tabH);
     }
 
     const int kTabBarH = 32;
     auto area = getLocalBounds().withTrimmedTop(hH + kTabBarH).reduced(pad);
     const int aW = area.getWidth(); (void)aW;
+
+    if (activeTab_ == Tab::Sequencer) {
+        sequencerPanel_.setBounds(area);
+        return;
+    }
 
     if (activeTab_ == Tab::Effects) {
         // ── EFFECTS tab layout ────────────────────────────────────────────────

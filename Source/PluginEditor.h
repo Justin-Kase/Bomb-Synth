@@ -4,6 +4,7 @@
 #include <BinaryData.h>
 #include "ui/WavetableDisplay.h"
 #include "ui/EnvelopeDisplay.h"
+#include "ui/SequencerPanel.h"
 #include "presets/PresetManager.h"
 #include <array>
 
@@ -152,13 +153,17 @@ private:
     EnvelopeDisplay fEnvDisplay_;
 
     // ── Tab bar ───────────────────────────────────────────────────────────────
-    enum class Tab { Synth, Effects };
+    enum class Tab { Synth, Effects, Sequencer };
     Tab activeTab_ = Tab::Synth;
-    juce::TextButton synthTabBtn_   { "SYNTH"   };
-    juce::TextButton effectsTabBtn_ { "EFFECTS" };
+    juce::TextButton synthTabBtn_     { "SYNTH"     };
+    juce::TextButton effectsTabBtn_   { "EFFECTS"   };
+    juce::TextButton sequencerTabBtn_ { "SEQUENCER" };
+
+    SequencerPanel sequencerPanel_;
     void setTab(Tab t);
     void setSynthVisible(bool v);
     void setEffectsVisible(bool v);
+    void setSequencerVisible(bool v);
     void timerCallback() override;
 
     // ── Effects sections ──────────────────────────────────────────────────────

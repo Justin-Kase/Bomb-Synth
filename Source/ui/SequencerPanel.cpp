@@ -1,0 +1,432 @@
+#include "SequencerPanel.h"
+
+const char* SequencerPanel::kNoteNames[] = {
+    "C","C#","D","D#","E","F","F#","G","G#","A","A#","B"
+};
+
+juce::String SequencerPanel::noteName(int midi) {
+    return juce::String(kNoteNames[midi % 12]) + juce::String(midi / 12 - 1);
+}
+
+SequencerPanel::SequencerPanel(Sequencer& seq) : seq_(seq) {
+    setOpaque(false);
+    startTimerHz(24);
+}
+SequencerPanel::~SequencerPanel() { stopTimer(); }
+
+// ─── Layout ───────────────────────────────────────────────────────────────────
+void SequencerPanel::resized() {
+    stepRects_.clear();
+    auto bounds = getLocalBounds();
+
+    // Global controls strip
+    auto hdr = bounds.removeFromTop(kHeaderH);
+    int bw = 40, gap = 4;
+    int x = hdr.getX() + gap;
+    int cy = hdr.getCentreY();
+    playBtnR_ = { x, cy - 14, 34, 28 };  x += 34 + gap;
+    stopBtnR_ = { x, cy - 14, 34, 28 };  x += 34 + gap * 3;
+    bpmLabelR_= { x, cy - 14, 64, 28 };  x += 64 + gap;
+    syncBtnR_ = { x, cy - 14, 68, 28 };  x += 68 + gap * 3;
+    rootBtnR_ = { x, cy - 14, 44, 28 };  x += 44 + gap;
+    scaleBtnR_= { x, cy - 14, 100, 28 }; x += 100 + gap * 3;
+    // Lanes count
+    lanesDecR_= { x,       cy - 10, 20, 20 };
+    lanesIncR_= { x + 50,  cy - 10, 20, 20 };
+    x += 80 + gap * 3;
+    arpBtnR_  = { x, cy - 14, 50, 28 }; x += 54 + gap;
+    arpModeR_ = { x, cy - 14, 90, 28 };
+
+    // Detail strip (bottom)
+    detailR_ = bounds.removeFromBottom(kDetailH);
+
+    // Distribute remaining height among lanes
+    const int nL = seq_.numActiveLanes;
+    for (int l = 0; l < nL; ++l) {
+        int lH = bounds.getHeight() / (nL - l);
+        auto lBounds = bounds.removeFromTop(lH);
+
+        // Lane header
+        auto lHdr = lBounds.removeFromLeft(kLaneHdrW);
+        int lx = lHdr.getX() + 4, ly = lHdr.getCentreY();
+        laneActiveR_[l] = { lx, ly - 10, 16, 20 };
+        stepsDecR_  [l] = { lx + 20, ly - 10, 18, 18 };
+        stepsIncR_  [l] = { lx + 55, ly - 10, 18, 18 };
+        octDecR_    [l] = { lx + 20, ly + 12, 18, 18 };
+        octIncR_    [l] = { lx + 55, ly + 12, 18, 18 };
+
+        // Step grid
+        rebuildStepRects(lBounds.reduced(2), l);
+    }
+
+    // Detail controls (note, vel, prob, utime)
+    auto det = detailR_.reduced(8, 6);
+    int dw = 120, dgap = 12;
+    auto makeSpinner = [&](juce::Rectangle<int>* dec, juce::Rectangle<int>* inc, int startX) {
+        *dec = { startX, det.getCentreY() - 11, 22, 22 };
+        *inc = { startX + dw - 22, det.getCentreY() - 11, 22, 22 };
+    };
+    makeSpinner(&detNoteBtnR_[0],  &detNoteBtnR_[1],  det.getX());
+    makeSpinner(&detVelBtnR_[0],   &detVelBtnR_[1],   det.getX() + dw + dgap);
+    makeSpinner(&detProbBtnR_[0],  &detProbBtnR_[1],  det.getX() + (dw + dgap) * 2);
+    makeSpinner(&detUTimeBtnR_[0], &detUTimeBtnR_[1], det.getX() + (dw + dgap) * 3);
+}
+
+void SequencerPanel::rebuildStepRects(juce::Rectangle<int> area, int laneIdx) {
+    const int n    = seq_.lanes[laneIdx].numSteps;
+    const int cellW = std::max(kStepMinW, area.getWidth() / n);
+    const int cellH = area.getHeight() - 4;
+    for (int s = 0; s < n; ++s) {
+        int x = area.getX() + s * cellW;
+        stepRects_.push_back({{ x, area.getY() + 2, cellW - 2, cellH }, laneIdx, s });
+    }
+}
+
+// ─── Paint ────────────────────────────────────────────────────────────────────
+void SequencerPanel::paint(juce::Graphics& g) {
+    // Background
+    g.setColour(juce::Colour(0xFF0A0A14));
+    g.fillRoundedRectangle(getLocalBounds().toFloat(), 8.f);
+
+    drawGlobalControls(g);
+
+    const int nL = seq_.numActiveLanes;
+    auto bounds = getLocalBounds().withTrimmedTop(kHeaderH).withTrimmedBottom(kDetailH);
+    for (int l = 0; l < nL; ++l) {
+        int lH = bounds.getHeight() / (nL - l);
+        drawLane(g, l, bounds.removeFromTop(lH));
+    }
+
+    drawStepDetail(g);
+}
+
+void SequencerPanel::drawGlobalControls(juce::Graphics& g) {
+    const juce::Colour col(0xFF1A1A2E);
+    g.setColour(col);
+    g.fillRoundedRectangle(getLocalBounds().removeFromTop(kHeaderH).toFloat().reduced(2), 6.f);
+
+    auto btn = [&](juce::Rectangle<int> r, const juce::String& label,
+                   bool active, juce::Colour c = juce::Colour(0xFF4FC3F7)) {
+        g.setColour(active ? c.withAlpha(0.3f) : juce::Colour(0xFF1E2030));
+        g.fillRoundedRectangle(r.toFloat(), 4.f);
+        g.setColour(active ? c : juce::Colour(0xFF607080));
+        g.drawRoundedRectangle(r.toFloat().reduced(0.5f), 4.f, 1.f);
+        g.setFont(juce::Font(10.f, juce::Font::bold));
+        g.setColour(active ? c : juce::Colour(0xFF8090A0));
+        g.drawText(label, r, juce::Justification::centred);
+    };
+
+    btn(playBtnR_, seq_.playing ? "||" : "▶", seq_.playing, juce::Colour(0xFF00E676));
+    btn(stopBtnR_, "■",  false, juce::Colour(0xFFFF3B6F));
+    btn(syncBtnR_, seq_.syncDAW ? "DAW SYNC" : "FREE", seq_.syncDAW, juce::Colour(0xFFFFD740));
+
+    // BPM display
+    g.setColour(juce::Colour(0xFF1E2030));
+    g.fillRoundedRectangle(bpmLabelR_.toFloat(), 4.f);
+    g.setColour(juce::Colour(0xFF607080));
+    g.drawRoundedRectangle(bpmLabelR_.toFloat().reduced(0.5f), 4.f, 1.f);
+    g.setFont(juce::Font(11.f, juce::Font::bold));
+    g.setColour(juce::Colour(0xFFE0E0E0));
+    g.drawText(juce::String(seq_.bpm, 1), bpmLabelR_, juce::Justification::centred);
+
+    // Root note
+    btn(rootBtnR_, noteName(seq_.rootNote), false, juce::Colour(0xFFBA68C8));
+
+    // Scale
+    btn(scaleBtnR_, SeqScale::kNames[juce::jlimit(0, SeqScale::kCount - 1, seq_.scaleIdx)],
+        seq_.scaleIdx > 0, juce::Colour(0xFFBA68C8));
+
+    // Lanes
+    g.setFont(juce::Font(9.f));
+    g.setColour(juce::Colour(0xFF607080));
+    auto lanesArea = juce::Rectangle<int>(lanesDecR_.getX(), lanesDecR_.getY(),
+                                          lanesIncR_.getRight() - lanesDecR_.getX(), 20);
+    g.drawText("LANES", lanesArea.translated(0, -12), juce::Justification::centred);
+    btn(lanesDecR_, "<", false);
+    g.setFont(juce::Font(11.f, juce::Font::bold));
+    g.setColour(juce::Colour(0xFFE0E0E0));
+    g.drawText(juce::String(seq_.numActiveLanes),
+               juce::Rectangle<int>(lanesDecR_.getRight(), lanesDecR_.getY(), 16, 20),
+               juce::Justification::centred);
+    btn(lanesIncR_, ">", false);
+
+    // Arp
+    btn(arpBtnR_, "ARP", seq_.arpEnabled, juce::Colour(0xFFFF9800));
+    if (seq_.arpEnabled)
+        btn(arpModeR_, ArpMode::kNames[seq_.arpMode % ArpMode::Count], true, juce::Colour(0xFFFF9800));
+}
+
+void SequencerPanel::drawLane(juce::Graphics& g, int laneIdx, juce::Rectangle<int> bounds) {
+    auto& lane = seq_.lanes[laneIdx];
+    const juce::Colour lc = laneColour(laneIdx);
+
+    // Lane header bg
+    auto lHdr = bounds.removeFromLeft(kLaneHdrW);
+    g.setColour(juce::Colour(0xFF111120));
+    g.fillRoundedRectangle(lHdr.toFloat().reduced(1), 4.f);
+    g.setColour(lc.withAlpha(0.3f));
+    g.drawRoundedRectangle(lHdr.toFloat().reduced(1.5f), 4.f, 1.f);
+
+    // Lane label
+    g.setFont(juce::Font(9.f, juce::Font::bold));
+    g.setColour(lc);
+    g.drawText("LANE " + juce::String(laneIdx + 1),
+               lHdr.getX(), lHdr.getY() + 4, kLaneHdrW, 14, juce::Justification::centred);
+
+    // Steps spinner
+    auto drawSpinner = [&](juce::Rectangle<int> dec, juce::Rectangle<int> inc,
+                            const juce::String& val, const juce::String& lbl) {
+        g.setColour(juce::Colour(0xFF1E2030));
+        g.fillRoundedRectangle(dec.toFloat(), 3.f);
+        g.fillRoundedRectangle(inc.toFloat(), 3.f);
+        g.setColour(lc.withAlpha(0.6f));
+        g.setFont(juce::Font(9.f, juce::Font::bold));
+        g.drawText("<", dec, juce::Justification::centred);
+        g.drawText(">", inc, juce::Justification::centred);
+        g.setColour(juce::Colour(0xFFE0E0E0));
+        g.setFont(juce::Font(10.f, juce::Font::bold));
+        g.drawText(val, dec.getRight(), dec.getY(), inc.getX() - dec.getRight(), dec.getHeight(),
+                   juce::Justification::centred);
+        g.setFont(juce::Font(7.5f));
+        g.setColour(juce::Colour(0xFF607080));
+        g.drawText(lbl, dec.getX(), dec.getY() - 12, kLaneHdrW - 8, 10, juce::Justification::centred);
+    };
+
+    drawSpinner(stepsDecR_[laneIdx], stepsIncR_[laneIdx], juce::String(lane.numSteps), "STEPS");
+    drawSpinner(octDecR_[laneIdx], octIncR_[laneIdx],
+                juce::String(lane.octave > 0 ? "+" : "") + juce::String(lane.octave), "OCT");
+
+    // Step grid bg
+    g.setColour(juce::Colour(0xFF0E0E1C));
+    g.fillRoundedRectangle(bounds.toFloat().reduced(1), 4.f);
+
+    // Draw step cells for this lane
+    for (const auto& sr : stepRects_) {
+        if (sr.lane != laneIdx) continue;
+        const auto& step = lane.steps[sr.step];
+        const bool  isCurrent = (sr.step == lane.currentStep) && seq_.playing;
+        const bool  isSelected = (selectedLane_ == laneIdx && selectedStep_ == sr.step);
+        const bool  isEven = (sr.step % 2 == 0);
+
+        auto r = sr.r.toFloat();
+
+        // Cell background
+        g.setColour(isEven ? juce::Colour(0xFF111128) : juce::Colour(0xFF0D0D20));
+        g.fillRoundedRectangle(r, 3.f);
+
+        if (step.gate) {
+            // Velocity fill (height proportional to velocity)
+            float fillH = r.getHeight() * step.vel;
+            auto fillR  = r.withTop(r.getBottom() - fillH);
+            // Probability alpha
+            float alpha = 0.25f + step.prob * 0.75f;
+            g.setColour(lc.withAlpha(isCurrent ? alpha : alpha * 0.7f));
+            g.fillRoundedRectangle(fillR, 3.f);
+
+            // Top bright line
+            g.setColour(lc.withAlpha(isCurrent ? 1.f : 0.5f));
+            g.fillRect(fillR.withHeight(1.5f));
+        }
+
+        // Microtiming indicator (small triangle at bottom)
+        if (std::abs(step.utime) > 0.01f) {
+            float cx  = r.getCentreX() + step.utime * r.getWidth();
+            float by  = r.getBottom() - 4.f;
+            g.setColour(juce::Colour(0xFFFFD740).withAlpha(0.8f));
+            juce::Path tri;
+            tri.addTriangle(cx - 3.f, by + 4.f, cx + 3.f, by + 4.f, cx, by);
+            g.fillPath(tri);
+        }
+
+        // Probability dot (bottom centre, size = prob)
+        if (step.prob < 0.99f) {
+            float dotR = 2.5f * step.prob;
+            g.setColour(juce::Colour(0xFFFF9800).withAlpha(0.9f));
+            g.fillEllipse(r.getCentreX() - dotR, r.getBottom() - dotR * 2 - 2.f, dotR * 2, dotR * 2);
+        }
+
+        // Playhead highlight
+        if (isCurrent) {
+            g.setColour(lc.withAlpha(0.25f));
+            g.fillRoundedRectangle(r, 3.f);
+            g.setColour(lc.brighter(0.3f));
+            g.drawRoundedRectangle(r.reduced(0.5f), 3.f, 1.5f);
+        }
+
+        // Selection border
+        if (isSelected) {
+            g.setColour(juce::Colours::white.withAlpha(0.8f));
+            g.drawRoundedRectangle(r.reduced(1.f), 3.f, 1.2f);
+        } else {
+            g.setColour(juce::Colour(0xFF252540));
+            g.drawRoundedRectangle(r, 3.f, 0.5f);
+        }
+    }
+}
+
+void SequencerPanel::drawStepDetail(juce::Graphics& g) {
+    auto r = detailR_.toFloat();
+    g.setColour(juce::Colour(0xFF111120));
+    g.fillRoundedRectangle(r, 6.f);
+    g.setColour(juce::Colour(0xFF252540));
+    g.drawRoundedRectangle(r.reduced(0.5f), 6.f, 1.f);
+
+    if (selectedLane_ >= seq_.numActiveLanes) return;
+    const auto& step = seq_.lanes[selectedLane_].steps[selectedStep_];
+    const juce::Colour lc = laneColour(selectedLane_);
+
+    // Title
+    g.setFont(juce::Font(9.f, juce::Font::bold));
+    g.setColour(lc.withAlpha(0.7f));
+    g.drawText("L" + juce::String(selectedLane_ + 1) + " STEP " + juce::String(selectedStep_ + 1),
+               detailR_.getX() + 8, detailR_.getY() + 4, 80, 12, juce::Justification::left);
+
+    auto drawField = [&](const juce::String& label, const juce::String& val,
+                         juce::Rectangle<int> dec, juce::Rectangle<int> inc) {
+        juce::Rectangle<int> labelR { dec.getX(), dec.getY() - 14, inc.getRight() - dec.getX(), 12 };
+        g.setFont(juce::Font(8.f));
+        g.setColour(juce::Colour(0xFF607080));
+        g.drawText(label, labelR, juce::Justification::centred);
+
+        g.setColour(juce::Colour(0xFF1A1A2E));
+        g.fillRoundedRectangle(dec.toFloat(), 3.f);
+        g.fillRoundedRectangle(inc.toFloat(), 3.f);
+        g.setColour(lc.withAlpha(0.6f));
+        g.setFont(juce::Font(10.f, juce::Font::bold));
+        g.drawText("<", dec, juce::Justification::centred);
+        g.drawText(">", inc, juce::Justification::centred);
+
+        g.setFont(juce::Font(11.f, juce::Font::bold));
+        g.setColour(juce::Colour(0xFFE0E0E0));
+        juce::Rectangle<int> valR { dec.getRight() + 2, dec.getY(), inc.getX() - dec.getRight() - 4, dec.getHeight() };
+        g.drawText(val, valR, juce::Justification::centred);
+    };
+
+    drawField("NOTE",   noteName(juce::jlimit(0, 127, step.note + seq_.lanes[selectedLane_].octave * 12)),
+              detNoteBtnR_[0],  detNoteBtnR_[1]);
+    drawField("VEL",    juce::String((int)(step.vel  * 100)) + "%",  detVelBtnR_[0],   detVelBtnR_[1]);
+    drawField("PROB",   juce::String((int)(step.prob * 100)) + "%",  detProbBtnR_[0],  detProbBtnR_[1]);
+    drawField("μTIME",  juce::String((int)(step.utime * 100)) + "%", detUTimeBtnR_[0], detUTimeBtnR_[1]);
+
+    // Gate indicator
+    g.setFont(juce::Font(9.f));
+    g.setColour(step.gate ? lc : juce::Colour(0xFF607080));
+    g.drawText(step.gate ? "GATE ON" : "GATE OFF",
+               detailR_.getRight() - 80, detailR_.getCentreY() - 8, 72, 16,
+               juce::Justification::centred);
+}
+
+// ─── Mouse ────────────────────────────────────────────────────────────────────
+void SequencerPanel::timerCallback() { repaint(); }
+
+const SequencerPanel::StepRect* SequencerPanel::hitTestStep(juce::Point<int> pt) const {
+    for (const auto& sr : stepRects_)
+        if (sr.r.contains(pt)) return &sr;
+    return nullptr;
+}
+
+void SequencerPanel::mouseDown(const juce::MouseEvent& e) {
+    auto pt = e.getPosition();
+
+    // Check global controls
+    if (pt.getY() < kHeaderH) { handleGlobalClick(pt); return; }
+
+    // Check detail controls
+    if (detailR_.contains(pt)) {
+        if (selectedLane_ >= seq_.numActiveLanes) return;
+        auto& step = seq_.lanes[selectedLane_].steps[selectedStep_];
+        float noteStep = e.mods.isShiftDown() ? 12.f : 1.f;
+        if (detNoteBtnR_[0].contains(pt)) { step.note = juce::jlimit(0,127, step.note - (int)noteStep); if(onStateChanged) onStateChanged(); repaint(); return; }
+        if (detNoteBtnR_[1].contains(pt)) { step.note = juce::jlimit(0,127, step.note + (int)noteStep); if(onStateChanged) onStateChanged(); repaint(); return; }
+        if (detVelBtnR_[0].contains(pt))  { step.vel  = juce::jlimit(0.f,1.f, step.vel  - 0.05f); if(onStateChanged) onStateChanged(); repaint(); return; }
+        if (detVelBtnR_[1].contains(pt))  { step.vel  = juce::jlimit(0.f,1.f, step.vel  + 0.05f); if(onStateChanged) onStateChanged(); repaint(); return; }
+        if (detProbBtnR_[0].contains(pt)) { step.prob = juce::jlimit(0.f,1.f, step.prob - 0.1f);  if(onStateChanged) onStateChanged(); repaint(); return; }
+        if (detProbBtnR_[1].contains(pt)) { step.prob = juce::jlimit(0.f,1.f, step.prob + 0.1f);  if(onStateChanged) onStateChanged(); repaint(); return; }
+        if (detUTimeBtnR_[0].contains(pt)){ step.utime= juce::jlimit(-0.5f,0.5f, step.utime - 0.05f); if(onStateChanged) onStateChanged(); repaint(); return; }
+        if (detUTimeBtnR_[1].contains(pt)){ step.utime= juce::jlimit(-0.5f,0.5f, step.utime + 0.05f); if(onStateChanged) onStateChanged(); repaint(); return; }
+        return;
+    }
+
+    // Check lane header controls
+    for (int l = 0; l < seq_.numActiveLanes; ++l) {
+        if (stepsDecR_[l].contains(pt)) { seq_.lanes[l].numSteps = juce::jlimit(1, SequencerLane::kMaxSteps, seq_.lanes[l].numSteps - 1); resized(); repaint(); if(onStateChanged) onStateChanged(); return; }
+        if (stepsIncR_[l].contains(pt)) { seq_.lanes[l].numSteps = juce::jlimit(1, SequencerLane::kMaxSteps, seq_.lanes[l].numSteps + 1); resized(); repaint(); if(onStateChanged) onStateChanged(); return; }
+        if (octDecR_[l].contains(pt))   { seq_.lanes[l].octave   = juce::jlimit(-3, 3, seq_.lanes[l].octave - 1); repaint(); if(onStateChanged) onStateChanged(); return; }
+        if (octIncR_[l].contains(pt))   { seq_.lanes[l].octave   = juce::jlimit(-3, 3, seq_.lanes[l].octave + 1); repaint(); if(onStateChanged) onStateChanged(); return; }
+    }
+
+    // Check step cells
+    if (auto* sr = hitTestStep(pt)) {
+        selectedLane_ = sr->lane;
+        selectedStep_ = sr->step;
+        auto& step = seq_.lanes[sr->lane].steps[sr->step];
+
+        if (e.mods.isRightButtonDown()) {
+            // Right-click: toggle gate
+            step.gate = !step.gate;
+        } else {
+            // Left-click: select + begin drag for velocity
+            dragging_    = true;
+            dragStartY_  = (float)pt.y;
+            dragOrigVel_ = step.vel;
+            // Single click toggles gate
+            if (!dragging_) step.gate = !step.gate;
+        }
+        if(onStateChanged) onStateChanged();
+        repaint();
+    }
+}
+
+void SequencerPanel::mouseDrag(const juce::MouseEvent& e) {
+    if (!dragging_) return;
+    auto pt = e.getPosition();
+    if (auto* sr = hitTestStep(pt)) {
+        if (sr->lane == selectedLane_ && sr->step == selectedStep_) {
+            float dy = dragStartY_ - pt.y;
+            float newVel = juce::jlimit(0.05f, 1.f, dragOrigVel_ + dy / 80.f);
+            seq_.lanes[selectedLane_].steps[selectedStep_].vel = newVel;
+            if(onStateChanged) onStateChanged();
+            repaint();
+        }
+    }
+}
+
+void SequencerPanel::mouseUp(const juce::MouseEvent&) {
+    if (dragging_) {
+        dragging_ = false;
+        // If barely moved, treat as toggle
+        auto& step = seq_.lanes[selectedLane_].steps[selectedStep_];
+        if (std::abs(step.vel - dragOrigVel_) < 0.02f)
+            step.gate = !step.gate;
+        if(onStateChanged) onStateChanged();
+        repaint();
+    }
+}
+
+void SequencerPanel::handleGlobalClick(juce::Point<int> pt) {
+    if (playBtnR_.contains(pt)) {
+        seq_.setPlaying(!seq_.playing);
+    } else if (stopBtnR_.contains(pt)) {
+        juce::MidiBuffer dummy;
+        seq_.stop(dummy);
+        for (auto& lane : seq_.lanes) lane.currentStep = 0;
+    } else if (syncBtnR_.contains(pt)) {
+        seq_.syncDAW = !seq_.syncDAW;
+    } else if (rootBtnR_.contains(pt)) {
+        seq_.rootNote = (seq_.rootNote + 1) % 12 + (seq_.rootNote / 12) * 12;
+    } else if (scaleBtnR_.contains(pt)) {
+        seq_.scaleIdx = (seq_.scaleIdx + 1) % SeqScale::kCount;
+    } else if (lanesDecR_.contains(pt)) {
+        seq_.numActiveLanes = juce::jmax(1, seq_.numActiveLanes - 1);
+        resized();
+    } else if (lanesIncR_.contains(pt)) {
+        seq_.numActiveLanes = juce::jmin(Sequencer::kMaxLanes, seq_.numActiveLanes + 1);
+        resized();
+    } else if (arpBtnR_.contains(pt)) {
+        seq_.arpEnabled = !seq_.arpEnabled;
+    } else if (arpModeR_.contains(pt) && seq_.arpEnabled) {
+        seq_.arpMode = (seq_.arpMode + 1) % ArpMode::Count;
+    }
+    if(onStateChanged) onStateChanged();
+    repaint();
+}

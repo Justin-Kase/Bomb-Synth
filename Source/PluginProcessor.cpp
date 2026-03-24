@@ -118,6 +118,7 @@ BombSynthAudioProcessor::BombSynthAudioProcessor()
 
 void BombSynthAudioProcessor::prepareToPlay(double sr, int blockSize) {
     sampleRate_ = sr;
+    sequencer_.prepare(sr);
     engine_.prepare(sr, blockSize);
 
     // Reverb
@@ -190,6 +191,10 @@ void BombSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::
     engine_.setAmpEnvParams   (amp);
     engine_.setFilterEnvParams(fenv);
     engine_.setMasterGain(get("master_gain"));
+
+    // Inject sequencer MIDI before engine processes
+    sequencer_.processBlock(midi, buf.getNumSamples(), getPlayHead());
+
     engine_.processBlock(buf, midi);
 
     const int numSamples = buf.getNumSamples();
@@ -260,12 +265,23 @@ juce::AudioProcessorEditor* BombSynthAudioProcessor::createEditor() {
 }
 
 void BombSynthAudioProcessor::getStateInformation(juce::MemoryBlock& d) {
+    auto root = std::make_unique<juce::XmlElement>("BombSynthState");
     auto s = params_.copyState();
-    if (auto x = s.createXml()) copyXmlToBinary(*x, d);
+    if (auto px = s.createXml()) root->addChildElement(px.release());
+    root->addChildElement(sequencer_.createXml());
+    copyXmlToBinary(*root, d);
 }
 void BombSynthAudioProcessor::setStateInformation(const void* d, int sz) {
-    if (auto x = std::unique_ptr<juce::XmlElement>(getXmlFromBinary(d, sz)))
-        params_.replaceState(juce::ValueTree::fromXml(*x));
+    if (auto root = std::unique_ptr<juce::XmlElement>(getXmlFromBinary(d, sz))) {
+        // Support both old (bare APVTS) and new (wrapped) state
+        if (root->getTagName() == "BombSynthState") {
+            if (auto* px = root->getFirstChildElement())
+                params_.replaceState(juce::ValueTree::fromXml(*px));
+            sequencer_.loadFromXml(root->getChildByName("Sequencer"));
+        } else {
+            params_.replaceState(juce::ValueTree::fromXml(*root));
+        }
+    }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new BombSynthAudioProcessor(); }

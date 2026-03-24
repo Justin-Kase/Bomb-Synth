@@ -2,6 +2,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include "engine/SynthEngine.h"
+#include "engine/Sequencer.h"
 
 class BombSynthAudioProcessor : public juce::AudioProcessor {
 public:
@@ -43,6 +44,11 @@ private:
     juce::AudioProcessorValueTreeState params_ { *this, nullptr, "BombSynth",
                                                   createParameters() };
     SynthEngine engine_;
+    Sequencer   sequencer_;
+
+public:
+    Sequencer& sequencer() { return sequencer_; }
+private:
 
     // ── Effects ───────────────────────────────────────────────────────────────
     juce::dsp::Reverb           reverb_;
