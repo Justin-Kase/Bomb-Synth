@@ -594,7 +594,7 @@ void BombSynthAudioProcessorEditor::paint(juce::Graphics& g) {
 
     g.setFont(juce::Font(10.f));
     g.setColour(BCol::textDim);
-    g.drawText("v0.3.0  |  Illbomb", getWidth() - 200, 0, 140, hH,
+    g.drawText("v0.4.0  |  Illbomb", getWidth() - 200, 0, 140, hH,
                juce::Justification::centredRight);
 }
 
