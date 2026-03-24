@@ -18,14 +18,13 @@ Dual filters (Moog Ladder + SVF), dual LFOs, amp and filter envelopes, 16-voice 
 
 | Platform | Link |
 |----------|------|
-| macOS (Universal) | [BombSynth-macOS.zip](../../releases/latest/download/BombSynth-macOS.zip) |
-| Windows (x64) | [BombSynth-Windows.zip](../../releases/latest/download/BombSynth-Windows.zip) |
-| Linux (x64) | [BombSynth-Linux.zip](../../releases/latest/download/BombSynth-Linux.zip) |
+| macOS Universal (VST3 + AU) | [BombSynth-macOS.zip](https://github.com/Justin-Kase/Bomb-Synth/releases/latest/download/BombSynth-macOS.zip) |
+| Windows / Linux | Build from source (see below) |
 
-**Installation:**
-- **macOS:** Copy `Bomb Synth.vst3` → `/Library/Audio/Plug-Ins/VST3/`
-- **Windows:** Copy `Bomb Synth.vst3` → `C:\Program Files\Common Files\VST3\`
-- **Linux:** Copy `Bomb Synth.vst3` → `~/.vst3/`
+**macOS installation:**
+1. Extract the zip
+2. Copy `Bomb Synth.vst3` → `/Library/Audio/Plug-Ins/VST3/`
+3. *(Optional)* Copy `Bomb Synth.component` → `/Library/Audio/Plug-Ins/Components/` (AU)
 
 ---
 
