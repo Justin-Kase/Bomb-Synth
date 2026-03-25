@@ -10,7 +10,7 @@ VST3 + AU · macOS Universal (arm64 / x86_64) · C++17 · JUCE 8
 
 | Platform | Link |
 |----------|------|
-| macOS Universal (VST3 + AU) | [BombSynth-macOS.zip](https://github.com/Justin-Kase/Bomb-Synth/releases/latest/download/BombSynth-macOS.zip) |
+| macOS Universal (VST3 + AU) | [BombSynth-v0.6.0-macOS.zip](https://github.com/Justin-Kase/Bomb-Synth/releases/latest/download/BombSynth-v0.6.0-macOS.zip) |
 | Windows / Linux | Build from source (see below) |
 
 **macOS installation:**
@@ -30,12 +30,13 @@ Bomb Synth is a professional-grade hybrid synthesizer. Three independent oscilla
 
 | Module | What it does |
 |--------|-------------|
-| **3× Wavetable Oscillators** | 6 built-in banks × 8 morphable frames each. Load your own WAV/AIFF. |
-| **Filter** | Moog Ladder LP/HP (4-pole) + SVF LP/BP. Drive, resonance, filter envelope. |
-| **Effects** | Reverb, Delay (ping-pong), Chorus — all post-synth, wet/dry per effect. |
-| **Sequencer** | 4 polyrhythmic lanes, probability per step, microtiming, scale quantization. |
+| **3× Wavetable Oscillators** | 6 built-in banks × 8 morphable frames. Load your own WAV/AIFF. Phase Bend/Smear/Mirror warp. |
+| **Granular Engine** | Per-oscillator WT/GR toggle. Density, size, spray, pitch scatter. Uses wavetable bank as source. |
+| **Filter** | Moog Ladder LP/HP, SVF LP/BP, Formant (vowel A–U), Comb. Drive, resonance, live H(f) display. |
+| **Effects** | Reverb, Delay, Chorus — post-synth, wet/dry per effect. |
+| **Sequencer** | 4 polyrhythmic lanes, per-step probability, microtiming, scale quantization (12 scales). |
 | **Arpeggiator** | Up/Down/UpDown/Random/As Played, 1–4 octaves, DAW tempo sync. |
-| **Modulation** | 2× LFOs (7 shapes), amp envelope, filter envelope, mod matrix. |
+| **Modulation** | 2× LFOs (7 shapes) → 8 routing slots → Cutoff/Pitch/Amp/Morph targets. |
 | **Presets** | 70 factory presets across 9 categories. |
 
 ---
@@ -182,10 +183,11 @@ Reverb (room/damp/width/wet) · Delay (time/feedback/wet) · Chorus (rate/depth/
 
 ## UI
 
-Three tabs in the content area:
+Four tabs in the content area:
 
-- **SYNTH** — Oscillators, Filter, Envelopes, LFOs, Master
+- **SYNTH** — Oscillators (WT/Granular toggle, warp controls), Filter (with H(f) display), Envelopes, LFOs, Master
 - **EFFECTS** — Reverb, Delay, Chorus
+- **MOD** — 8 routing slots: source → target → amount
 - **SEQUENCER** — Step grid, lane controls, arpeggiator, transport
 
 Header bar: title · preset browser (category + name + `< >`) · version + branding
@@ -236,6 +238,18 @@ See **[SPEC.md](SPEC.md)** for full DSP notes, class hierarchy, and signal flow 
 ---
 
 ## Changelog
+
+### v0.6.0 (March 2026)
+- **Granular engine** — per-oscillator [WT|GR] toggle. MORPH → grain position scan. DENSITY, SIZE, SPRAY, PITCH SCATTER knobs. Uses current wavetable bank as grain source.
+- **Spectral warp** — per-oscillator warp mode (None/Phase Bend/Smear/Mirror) + WARP AMT knob. WavetableDisplay shows PB/SM/MR badge.
+
+### v0.5.0 (March 2026)
+- **MODULATION tab** — 8 routing slots: LFO1/LFO2/Velocity/ModWheel → Cutoff/Pitch/Amp/Osc Morph/LFO2 Rate
+- **LFO engine** — 7 shapes running at block rate, feeding mod matrix
+- **FormantFilter** — vowel filter A/E/I/O/U (`filter_type=4`)
+- **CombFilter** — feedback comb filter (`filter_type=5`)
+- **FilterDisplay** — live H(f) frequency response curve, animated
+- **Wavetable path persistence** — user banks reload automatically on next session
 
 ### v0.4.0 (March 2026)
 - **Step sequencer** — 4 polyrhythmic lanes, per-step probability, microtiming, gate length
