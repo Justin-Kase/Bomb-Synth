@@ -69,6 +69,10 @@ public:
 
     // WT knobs
     BKnob morphKnob  { "MORPH",   BCol::accent2 };
+    // Octave spinner (drawn in paint, click handled in mouseDown)
+    int   octaveValue_ = 0;   // -3..+3, kept in sync with APVTS
+    juce::Rectangle<int> octDecR_, octIncR_, octDisplayR_;
+
     BKnob tuneKnob   { "TUNE",    BCol::accent2 };
     BKnob fineKnob   { "FINE",    BCol::accent2 };
     BKnob levelKnob  { "LEVEL",   BCol::accent2 };
@@ -102,6 +106,9 @@ public:
 
     // juce::Slider::Listener — updates display morph when knob moves
     void sliderValueChanged(juce::Slider* s) override;
+    void mouseDown(const juce::MouseEvent& e) override;
+
+    std::function<void(int)> onOctaveChanged;  // called with new octave value
 
     bool granMode() const { return granMode_; }
     int  warpModeVal() const { return warpMode_; }

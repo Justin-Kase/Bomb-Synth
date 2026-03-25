@@ -19,6 +19,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout BombSynthAudioProcessor::cre
         p.push_back(std::make_unique<AudioParameterInt>  ("osc"+n+"_wave",  "OSC "+n+" Bank",  0, 31, 0));
         p.push_back(std::make_unique<AudioParameterFloat>("osc"+n+"_morph", "OSC "+n+" Morph",
             NormalisableRange<float>{0.f, 1.f}, 0.f));
+        p.push_back(std::make_unique<juce::AudioParameterInt>  ("osc"+n+"_oct",   "OSC "+n+" Octave", -3, 3, 0));
         p.push_back(std::make_unique<AudioParameterFloat>("osc"+n+"_tune",  "OSC "+n+" Tune",
             NormalisableRange<float>{-24.f, 24.f, 1.f}, 0.f));
         p.push_back(std::make_unique<AudioParameterFloat>("osc"+n+"_fine",  "OSC "+n+" Fine",
@@ -211,7 +212,8 @@ void BombSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::
         engine_.setOscBankIndex(i, geti(bankIds[i]));
         engine_.setOscMorphPos (i, get (morphIds[i]));
         engine_.setOscLevel    (i, get (levelIds[i]));
-        engine_.setOscTune     (i, get (tuneIds[i]));
+        static const char* octIds[3]   = {"osc1_oct","osc2_oct","osc3_oct"};
+        engine_.setOscTune     (i, get(tuneIds[i]) + (float)geti(octIds[i]) * 12.f);
         auto eng = (geti(engineIds[i]) == 0) ? OscEngineType::Wavetable : OscEngineType::Granular;
         engine_.setOscEngine        (i, eng);
         engine_.setGranularDensity  (i, get (granDensIds[i]));

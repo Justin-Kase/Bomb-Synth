@@ -184,6 +184,16 @@ void OscStrip::setWarpModeDisplay(int mode) {
     display.setWarpMode(mode);
 }
 
+void OscStrip::mouseDown(const juce::MouseEvent& e) {
+    auto pt = e.getPosition();
+    if (octDecR_.contains(pt) || octIncR_.contains(pt)) {
+        int delta = octDecR_.contains(pt) ? -1 : 1;
+        octaveValue_ = juce::jlimit(-3, 3, octaveValue_ + delta);
+        if (onOctaveChanged) onOctaveChanged(octaveValue_);
+        repaint();
+    }
+}
+
 void OscStrip::sliderValueChanged(juce::Slider* s) {
     if (s == &morphKnob.slider)
         display.setMorphPos((float)morphKnob.slider.getValue());
@@ -214,6 +224,20 @@ void OscStrip::paint(juce::Graphics& g) {
                (int)badge.getY() + 10, (int)badge.getWidth(),
                (int)badge.getHeight() - 10, juce::Justification::centred);
 
+    // Octave spinner
+    g.setFont(juce::Font(8.f, juce::Font::bold));
+    g.setColour(labelCol.withAlpha(0.5f));
+    g.drawText("<", octDecR_,     juce::Justification::centred);
+    g.drawText(">", octIncR_,     juce::Justification::centred);
+    g.setFont(juce::Font(9.f, juce::Font::bold));
+    g.setColour(octaveValue_ != 0 ? labelCol : BCol::textDim);
+    juce::String octStr = (octaveValue_ > 0 ? "+" : "") + juce::String(octaveValue_);
+    g.drawText(octStr, octDisplayR_, juce::Justification::centred);
+    // tiny "OCT" label above
+    g.setFont(juce::Font(6.5f));
+    g.setColour(BCol::textDim);
+    g.drawText("OCT", octDecR_.getX(), octDecR_.getY() - 9, kLabelW, 9, juce::Justification::centred);
+
     // Row divider
     g.setColour(BCol::border);
     g.drawHorizontalLine(H - 1, 0.f, (float)getWidth());
@@ -223,10 +247,18 @@ void OscStrip::resized() {
     auto b = getLocalBounds().reduced(0, 2);
     const int H = b.getHeight();
 
-    // OSC label + mode button on left
+    // OSC label + octave spinner + mode button on left
     auto labelArea = b.removeFromLeft(kLabelW);
     const int badgeH = (int)(H * 0.55f);
-    modeBtn.setBounds(labelArea.removeFromBottom(H - badgeH - 2).reduced(1, 1));
+    auto bottomArea = labelArea.removeFromBottom(H - badgeH - 2);
+    // Octave spinner occupies top half of bottom area, mode button the rest
+    auto spinArea = bottomArea.removeFromTop(bottomArea.getHeight() / 2);
+    modeBtn.setBounds(bottomArea.reduced(1, 1));
+    // < [+0] > spinner
+    const int spinBtnW = 12;
+    octDecR_     = { spinArea.getX(),                         spinArea.getY(), spinBtnW,                    spinArea.getHeight() };
+    octIncR_     = { spinArea.getRight() - spinBtnW,          spinArea.getY(), spinBtnW,                    spinArea.getHeight() };
+    octDisplayR_ = { spinArea.getX() + spinBtnW,              spinArea.getY(), spinArea.getWidth() - spinBtnW * 2, spinArea.getHeight() };
 
     // Wavetable display
     display.setBounds(b.removeFromLeft(kDisplayW));
@@ -323,6 +355,19 @@ BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProce
         oscs_[i].onModeChanged = [this, engParamId](bool gran) {
             if (auto* param = proc_.parameters().getParameter(engParamId))
                 param->setValueNotifyingHost(gran ? 1.f : 0.f);
+        };
+
+        // Octave spinner → APVTS osc{n}_oct param
+        static const char* octIds[3] = {"osc1_oct","osc2_oct","osc3_oct"};
+        const juce::String octParamId = octIds[i];
+        // Restore octave display from current param value
+        int storedOct = (int)par.getRawParameterValue(octParamId)->load();
+        oscs_[i].octaveValue_ = storedOct;
+        oscs_[i].onOctaveChanged = [this, octParamId](int newOct) {
+            if (auto* param = proc_.parameters().getParameter(octParamId)) {
+                auto* rp = dynamic_cast<juce::RangedAudioParameter*>(param);
+                if (rp) param->setValueNotifyingHost(rp->getNormalisableRange().convertTo0to1((float)newOct));
+            }
         };
 
         // Warp mode button → APVTS warp_mode param
