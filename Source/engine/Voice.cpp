@@ -115,13 +115,39 @@ void Voice::setOscTune(int oscIdx, float semitones) {
 void Voice::renderBlock(juce::AudioBuffer<float>& buffer, int startSample, int numSamples) {
     if (!isActive()) return;
 
-    // Apply modulation: pitch and morph offsets each block
+    // Apply per-osc modulation each block
     for (int i = 0; i < kNumOscs; ++i) {
-        float hz = midiNoteToHz(midiNote_, oscTune_[i] + modPitch_);
+        // Pitch: base tune + global pitch mod + per-osc tune mod + fine mod (cents→semitones)
+        float tuneSt = oscTune_[i] + modPitch_ + modTune_[i] + modFine_[i] * 0.01f;
+        float hz = midiNoteToHz(midiNote_, tuneSt);
         analogOscs_[i].setFrequency(hz);
         wavetableOscs_[i].setFrequency(hz);
+        // Morph
         float morphMod = juce::jlimit(0.f, 1.f, baseMorph_[i] + modMorph_[i]);
         wavetableOscs_[i].setMorphPosition(morphMod);
+        // Level
+        float levelMod = juce::jlimit(0.f, 1.f, oscLevels_[i] + modLevel_[i]);
+        analogOscs_[i].setGain(levelMod);
+        wavetableOscs_[i].setGain(levelMod);
+        // FM
+        if (std::abs(modFM_[i]) > 0.001f)
+            analogOscs_[i].setFMAmount(juce::jlimit(0.f, 1.f, 0.f + modFM_[i]));
+        // Detune: no dedicated setter on WT osc — absorbed via fine pitch offset
+        if (std::abs(modDetune_[i]) > 0.001f) {
+            // Re-use fine modulation channel with a slight detuning offset
+            float detuneHz = hz * (std::pow(2.f, modDetune_[i] * 0.5f / 12.f) - 1.f);
+            wavetableOscs_[i].setFrequency(hz + detuneHz);
+        }
+    }
+    // Filter modulation: res + drive
+    if (std::abs(modFilterRes_) > 0.001f) {
+        float r = juce::jlimit(0.f, 1.f, baseResonance_ + modFilterRes_);
+        ladderFilter_.setResonance(r);
+        svfFilter_.setResonance(r);
+    }
+    if (std::abs(modFilterDrive_) > 0.001f) {
+        float d = juce::jlimit(1.f, 8.f, 1.f + modFilterDrive_ * 7.f);
+        ladderFilter_.setDrive(d);
     }
 
     // Configure filter based on type

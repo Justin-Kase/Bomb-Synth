@@ -1,8 +1,28 @@
 #include "ModulationPanel.h"
 
 static const char* kSrcNames[] = { "Off", "LFO 1", "LFO 2", "Velocity", "ModWheel" };
-static const char* kDstNames[] = { "Off", "Cutoff", "Pitch", "Amp",
-                                    "Osc1 Morph", "Osc2 Morph", "Osc3 Morph", "LFO2 Rate" };
+static const char* kDstNames[] = {
+    "Off",
+    // Filter
+    "Cutoff", "Resonance", "Drive",
+    // Global
+    "Pitch", "Amp",
+    // Morph
+    "Osc1 Morph", "Osc2 Morph", "Osc3 Morph",
+    // Tune
+    "Osc1 Tune", "Osc2 Tune", "Osc3 Tune",
+    // Fine
+    "Osc1 Fine", "Osc2 Fine", "Osc3 Fine",
+    // Level
+    "Osc1 Level", "Osc2 Level", "Osc3 Level",
+    // FM
+    "Osc1 FM", "Osc2 FM", "Osc3 FM",
+    // Detune
+    "Osc1 Detune", "Osc2 Detune", "Osc3 Detune",
+    // LFO
+    "LFO2 Rate"
+};
+static constexpr int kNumDstNames = 25;
 
 ModulationPanel::ModulationPanel(juce::AudioProcessorValueTreeState& params)
     : params_(params)
@@ -23,7 +43,7 @@ ModulationPanel::ModulationPanel(juce::AudioProcessorValueTreeState& params)
         addAndMakeVisible(row.srcBox);
 
         // Destination combo
-        for (int k = 0; k < 8; ++k) row.dstBox.addItem(kDstNames[k], k + 1);
+        for (int k = 0; k < kNumDstNames; ++k) row.dstBox.addItem(kDstNames[k], k + 1);
         row.dstBox.setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xFF1A1A2E));
         row.dstBox.setColour(juce::ComboBox::textColourId,       juce::Colour(0xFFE0E0E0));
         row.dstBox.setColour(juce::ComboBox::outlineColourId,    col.withAlpha(0.4f));

@@ -52,11 +52,16 @@ public:
     void setOscWarpAmount(int osc, float amt) { if (osc>=0&&osc<kNumOscs) wavetableOscs_[osc].setWarpAmount(amt); }
 
     // Modulation inputs (applied each renderBlock)
-    void setModPitch(float semitones) { modPitch_ = semitones; }
-    void setModMorph(int osc, float delta) {
-        if (osc >= 0 && osc < kNumOscs) modMorph_[osc] = delta;
-    }
-    void setModAmp(float delta)       { modAmp_ = delta; }
+    void setModPitch   (float st)           { modPitch_ = st; }
+    void setModMorph   (int osc, float d)   { if (osc>=0&&osc<kNumOscs) modMorph_[osc]   = d; }
+    void setModAmp     (float d)            { modAmp_   = d; }
+    void setModTune    (int osc, float st)  { if (osc>=0&&osc<kNumOscs) modTune_[osc]    = st; }
+    void setModFine    (int osc, float c)   { if (osc>=0&&osc<kNumOscs) modFine_[osc]    = c; }
+    void setModLevel   (int osc, float d)   { if (osc>=0&&osc<kNumOscs) modLevel_[osc]   = d; }
+    void setModFM      (int osc, float d)   { if (osc>=0&&osc<kNumOscs) modFM_[osc]      = d; }
+    void setModDetune  (int osc, float d)   { if (osc>=0&&osc<kNumOscs) modDetune_[osc]  = d; }
+    void setModFilterRes  (float d)         { modFilterRes_   = d; }
+    void setModFilterDrive(float d)         { modFilterDrive_ = d; }
 
     int   getMidiNote() const { return midiNote_; }
     float getVelocity() const { return velocity_; }
@@ -76,9 +81,16 @@ private:
     FilterRouting filterRouting_ = FilterRouting::Serial;
 
     // Modulation offsets (set each block by SynthEngine)
-    float modPitch_ = 0.f;
-    float modAmp_   = 0.f;
-    std::array<float, kNumOscs> modMorph_ { 0.f, 0.f, 0.f };
+    float modPitch_      = 0.f;
+    float modAmp_        = 0.f;
+    float modFilterRes_  = 0.f;
+    float modFilterDrive_= 0.f;
+    std::array<float, kNumOscs> modMorph_  { 0.f, 0.f, 0.f };
+    std::array<float, kNumOscs> modTune_   { 0.f, 0.f, 0.f };   // semitones
+    std::array<float, kNumOscs> modFine_   { 0.f, 0.f, 0.f };   // cents
+    std::array<float, kNumOscs> modLevel_  { 0.f, 0.f, 0.f };   // 0-1 delta
+    std::array<float, kNumOscs> modFM_     { 0.f, 0.f, 0.f };
+    std::array<float, kNumOscs> modDetune_ { 0.f, 0.f, 0.f };
     std::array<float, kNumOscs> baseMorph_ { 0.f, 0.f, 0.f };
 
     std::array<OscEngineType, kNumOscs> oscTypes_ {

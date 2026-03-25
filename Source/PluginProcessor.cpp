@@ -99,11 +99,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout BombSynthAudioProcessor::cre
 
     // ── Mod Routing Slots (8×) ───────────────────────────────────────────────
     // Source: 0=Off 1=LFO1 2=LFO2 3=Velocity 4=ModWheel
-    // Target: 0=Off 1=Cutoff 2=Pitch 3=Amp 4=Osc1Morph 5=Osc2Morph 6=Osc3Morph 7=LFO2Rate
+    // Target: 0=Off 1=Cutoff 2=Res 3=Drive 4=Pitch 5=Amp
+    //         6=O1Morph 7=O2Morph 8=O3Morph
+    //         9=O1Tune 10=O2Tune 11=O3Tune
+    //         12=O1Fine 13=O2Fine 14=O3Fine
+    //         15=O1Level 16=O2Level 17=O3Level
+    //         18=O1FM 19=O2FM 20=O3FM
+    //         21=O1Detune 22=O2Detune 23=O3Detune
+    //         24=LFO2Rate
     for (int i = 0; i < 8; ++i) {
         String s(i);
         p.push_back(std::make_unique<AudioParameterInt>  ("mod"+s+"_src", "Mod"+s+" Source", 0, 4, 0));
-        p.push_back(std::make_unique<AudioParameterInt>  ("mod"+s+"_dst", "Mod"+s+" Target", 0, 7, 0));
+        p.push_back(std::make_unique<AudioParameterInt>  ("mod"+s+"_dst", "Mod"+s+" Target", 0, 24, 0));
         p.push_back(std::make_unique<AudioParameterFloat>("mod"+s+"_amt", "Mod"+s+" Amount",
             NormalisableRange<float>{-1.f, 1.f}, i == 0 ? 0.5f : 0.f));
     }
@@ -245,6 +252,13 @@ void BombSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::
 
     engine_.setAmpEnvParams   (amp);
     engine_.setFilterEnvParams(fenv);
+    // Capture ModWheel (CC1) from incoming MIDI
+    for (const auto meta : midi) {
+        const auto msg = meta.getMessage();
+        if (msg.isController() && msg.getControllerNumber() == 1)
+            modWheelValue_ = msg.getControllerValue() / 127.f;
+    }
+
     engine_.setMasterGain(get("master_gain"));
 
     // ── LFO processing ────────────────────────────────────────────────────────
@@ -263,10 +277,20 @@ void BombSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::
     const float lfo2val = lfo2_.tick();
 
     // ── Mod routing slots ──────────────────────────────────────────────────────
-    modCutoff_ = 0.f;
-    modPitch_  = 0.f;
-    modAmp_    = 0.f;
-    modMorph_  = { 0.f, 0.f, 0.f };
+    modCutoff_      = 0.f;
+    modPitch_       = 0.f;
+    modAmp_         = 0.f;
+    modFilterRes_   = 0.f;
+    modFilterDrive_ = 0.f;
+    modMorph_   = { 0.f, 0.f, 0.f };
+    modTune_    = { 0.f, 0.f, 0.f };
+    modFine_    = { 0.f, 0.f, 0.f };
+    modLevel_   = { 0.f, 0.f, 0.f };
+    modFM_      = { 0.f, 0.f, 0.f };
+    modDetune_  = { 0.f, 0.f, 0.f };
+
+    // ModWheel: read current MIDI CC1 value (0–1)
+    float modWheelVal = modWheelValue_;
 
     for (int i = 0; i < 8; ++i) {
         juce::String s(i);
@@ -274,26 +298,51 @@ void BombSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::
         const int   dst = geti(("mod" + s + "_dst").toRawUTF8());
         const float amt = get (("mod" + s + "_amt").toRawUTF8());
 
-        if (src == 0 || dst == 0) continue;   // Off
+        if (src == 0 || dst == 0) continue;
 
         float modVal = 0.f;
         switch (src) {
-            case 1: modVal = lfo1val; break;
-            case 2: modVal = lfo2val; break;
-            case 3: modVal = 0.f;     break;   // Velocity — not available at block rate
-            case 4: modVal = 0.f;     break;   // ModWheel — not yet wired
+            case 1: modVal = lfo1val;      break;   // LFO1
+            case 2: modVal = lfo2val;      break;   // LFO2
+            case 3: modVal = 0.f;          break;   // Velocity — per-note, not block-rate
+            case 4: modVal = modWheelVal;  break;   // ModWheel
             default: break;
         }
         modVal *= amt;
 
         switch (dst) {
-            case 1: modCutoff_    += modVal * 10000.f;  break;  // Cutoff offset in Hz
-            case 2: modPitch_     += modVal * 12.f;     break;  // Pitch ±12 semitones
-            case 3: modAmp_       += modVal;             break;  // Amp offset
-            case 4: modMorph_[0] += modVal;             break;
-            case 5: modMorph_[1] += modVal;             break;
-            case 6: modMorph_[2] += modVal;             break;
-            case 7: lfo2_.setRate(juce::jmax(0.01f, lfo2Rate + modVal * 10.f)); break;
+            // Global
+            case  1: modCutoff_      += modVal * 10000.f; break;  // Filter Cutoff (Hz)
+            case  2: modFilterRes_   += modVal;            break;  // Filter Res (0-1 delta)
+            case  3: modFilterDrive_ += modVal;            break;  // Filter Drive (0-1 → 0-7x)
+            case  4: modPitch_       += modVal * 12.f;     break;  // Global Pitch ±12st
+            case  5: modAmp_         += modVal;            break;  // Amp
+            // Per-osc Morph
+            case  6: modMorph_[0]   += modVal; break;
+            case  7: modMorph_[1]   += modVal; break;
+            case  8: modMorph_[2]   += modVal; break;
+            // Per-osc Tune (semitones)
+            case  9: modTune_[0]    += modVal * 12.f; break;
+            case 10: modTune_[1]    += modVal * 12.f; break;
+            case 11: modTune_[2]    += modVal * 12.f; break;
+            // Per-osc Fine (cents)
+            case 12: modFine_[0]    += modVal * 100.f; break;
+            case 13: modFine_[1]    += modVal * 100.f; break;
+            case 14: modFine_[2]    += modVal * 100.f; break;
+            // Per-osc Level
+            case 15: modLevel_[0]   += modVal; break;
+            case 16: modLevel_[1]   += modVal; break;
+            case 17: modLevel_[2]   += modVal; break;
+            // Per-osc FM
+            case 18: modFM_[0]      += modVal; break;
+            case 19: modFM_[1]      += modVal; break;
+            case 20: modFM_[2]      += modVal; break;
+            // Per-osc Detune
+            case 21: modDetune_[0]  += modVal; break;
+            case 22: modDetune_[1]  += modVal; break;
+            case 23: modDetune_[2]  += modVal; break;
+            // LFO2 Rate
+            case 24: lfo2_.setRate(juce::jmax(0.01f, lfo2Rate + modVal * 10.f)); break;
             default: break;
         }
     }
@@ -301,7 +350,16 @@ void BombSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::
     engine_.setModCutoffHz      (modCutoff_);
     engine_.setModPitchSemitones(modPitch_);
     engine_.setModAmp           (modAmp_);
-    for (int i = 0; i < 3; ++i) engine_.setModMorph(i, modMorph_[i]);
+    engine_.setModFilterRes     (modFilterRes_);
+    engine_.setModFilterDrive   (modFilterDrive_);
+    for (int i = 0; i < 3; ++i) {
+        engine_.setModMorph  (i, modMorph_[i]);
+        engine_.setModTune   (i, modTune_[i]);
+        engine_.setModFine   (i, modFine_[i]);
+        engine_.setModLevel  (i, modLevel_[i]);
+        engine_.setModFM     (i, modFM_[i]);
+        engine_.setModDetune (i, modDetune_[i]);
+    }
 
     // Inject sequencer MIDI before engine processes
     sequencer_.processBlock(midi, buf.getNumSamples(), getPlayHead());

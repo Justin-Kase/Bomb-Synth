@@ -54,10 +54,18 @@ private:
     LFOEngine lfo1_, lfo2_;
 
     // Accumulated mod values (written in processBlock, read by engine)
-    float modCutoff_ = 0.f;
-    float modPitch_  = 0.f;
-    float modAmp_    = 0.f;
-    std::array<float, 3> modMorph_ { 0.f, 0.f, 0.f };
+    float modCutoff_      = 0.f;
+    float modPitch_       = 0.f;
+    float modAmp_         = 0.f;
+    float modFilterRes_   = 0.f;
+    float modFilterDrive_ = 0.f;
+    float modWheelValue_  = 0.f;   // updated from MIDI CC1
+    std::array<float, 3> modMorph_  { 0.f, 0.f, 0.f };
+    std::array<float, 3> modTune_   { 0.f, 0.f, 0.f };
+    std::array<float, 3> modFine_   { 0.f, 0.f, 0.f };
+    std::array<float, 3> modLevel_  { 0.f, 0.f, 0.f };
+    std::array<float, 3> modFM_     { 0.f, 0.f, 0.f };
+    std::array<float, 3> modDetune_ { 0.f, 0.f, 0.f };
 
     // Persisted user wavetable file paths
     juce::StringArray userWavetablePaths_;

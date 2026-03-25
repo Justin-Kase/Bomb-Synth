@@ -39,12 +39,17 @@ public:
     void setOscWarpAmount(int osc, float amt);
 
     // Modulation pass-through — applied each processBlock
-    void setModCutoffHz     (float hz)  { modCutoffHz_        = hz; }
+    void setModCutoffHz      (float hz) { modCutoffHz_        = hz; }
     void setModPitchSemitones(float st) { modPitchSemitones_  = st; }
-    void setModAmp          (float amp) { modAmp_             = amp; }
-    void setModMorph        (int i, float v) {
-        if (i >= 0 && i < 3) modMorph_[i] = v;
-    }
+    void setModAmp           (float v)  { modAmp_             = v;  }
+    void setModMorph         (int i, float v) { if(i>=0&&i<3) modMorph_[i]  = v; }
+    void setModTune          (int i, float v) { if(i>=0&&i<3) modTune_[i]   = v; }
+    void setModFine          (int i, float v) { if(i>=0&&i<3) modFine_[i]   = v; }
+    void setModLevel         (int i, float v) { if(i>=0&&i<3) modLevel_[i]  = v; }
+    void setModFM            (int i, float v) { if(i>=0&&i<3) modFM_[i]     = v; }
+    void setModDetune        (int i, float v) { if(i>=0&&i<3) modDetune_[i] = v; }
+    void setModFilterRes     (float v)  { modFilterRes_       = v;  }
+    void setModFilterDrive   (float v)  { modFilterDrive_     = v;  }
 
 private:
     void handleNoteOn (int note, float vel);
@@ -63,7 +68,14 @@ private:
     float modCutoffHz_       = 0.f;
     float modPitchSemitones_ = 0.f;
     float modAmp_            = 0.f;
+    float modFilterRes_      = 0.f;
+    float modFilterDrive_    = 0.f;
     float modMorph_[3]       = {};
+    float modTune_[3]        = {};
+    float modFine_[3]        = {};
+    float modLevel_[3]       = {};
+    float modFM_[3]          = {};
+    float modDetune_[3]      = {};
 
     std::array<Voice, kMaxVoices> voices_;
 };

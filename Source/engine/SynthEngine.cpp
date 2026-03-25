@@ -90,9 +90,18 @@ void SynthEngine::processBlock(juce::AudioBuffer<float>& audio, juce::MidiBuffer
     for (auto& v : voices_) {
         if (!v.isActive()) continue;
         v.setCutoff(effectiveCutoff);
-        v.setModPitch(modPitchSemitones_);
-        v.setModAmp(modAmp_);
-        for (int i = 0; i < 3; ++i) v.setModMorph(i, modMorph_[i]);
+        v.setModPitch     (modPitchSemitones_);
+        v.setModAmp       (modAmp_);
+        v.setModFilterRes (modFilterRes_);
+        v.setModFilterDrive(modFilterDrive_);
+        for (int i = 0; i < 3; ++i) {
+            v.setModMorph  (i, modMorph_[i]);
+            v.setModTune   (i, modTune_[i]);
+            v.setModFine   (i, modFine_[i]);
+            v.setModLevel  (i, modLevel_[i]);
+            v.setModFM     (i, modFM_[i]);
+            v.setModDetune (i, modDetune_[i]);
+        }
     }
 
     int numSamples = audio.getNumSamples(), pos = 0;
