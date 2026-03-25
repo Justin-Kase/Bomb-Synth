@@ -10,7 +10,7 @@ VST3 + AU · macOS Universal (arm64 / x86_64) · C++17 · JUCE 8
 
 | Platform | Link |
 |----------|------|
-| macOS Universal (VST3 + AU) | [BombSynth-v0.6.0-macOS.zip](https://github.com/Justin-Kase/Bomb-Synth/releases/latest/download/BombSynth-v0.6.0-macOS.zip) |
+| macOS Universal (VST3 + AU) | [BombSynth-v0.7.0-macOS.zip](https://github.com/Justin-Kase/Bomb-Synth/releases/latest/download/BombSynth-v0.7.0-macOS.zip) |
 | Windows / Linux | Build from source (see below) |
 
 **macOS installation:**
@@ -30,13 +30,15 @@ Bomb Synth is a professional-grade hybrid synthesizer. Three independent oscilla
 
 | Module | What it does |
 |--------|-------------|
+| **9 Oscillator Engines** | WT · GR · Sine · Saw · SuperSaw (7-voice) · Square (w/ PW) · Triangle · SawTri · Noise — per oscillator |
 | **3× Wavetable Oscillators** | 6 built-in banks × 8 morphable frames. Load your own WAV/AIFF. Phase Bend/Smear/Mirror warp. |
 | **Granular Engine** | Per-oscillator WT/GR toggle. Density, size, spray, pitch scatter. Uses wavetable bank as source. |
+| **Per-osc Octave** | ±3 octave spinner per oscillator, independent of TUNE semitone knob. |
 | **Filter** | Moog Ladder LP/HP, SVF LP/BP, Formant (vowel A–U), Comb. Drive, resonance, live H(f) display. |
 | **Effects** | Reverb, Delay, Chorus — post-synth, wet/dry per effect. |
 | **Sequencer** | 4 polyrhythmic lanes, per-step probability, microtiming, scale quantization (12 scales). |
-| **Arpeggiator** | Up/Down/UpDown/Random/As Played, 1–4 octaves, DAW tempo sync. |
-| **Modulation** | 2× LFOs (7 shapes) → 8 routing slots → Cutoff/Pitch/Amp/Morph targets. |
+| **Arpeggiator** | Per-lane: Up/Down/UpDown/Random/AsPlayed/Converge/Diverge, rate, 1–4 octaves. **[RND]** to randomize any lane. |
+| **Modulation** | 2× LFOs (7 shapes) + ModWheel → 8 routing slots → 24 targets (all osc params + filter). |
 | **Presets** | 70 factory presets across 9 categories. |
 
 ---
@@ -239,6 +241,13 @@ See **[SPEC.md](SPEC.md)** for full DSP notes, class hierarchy, and signal flow 
 
 ## Changelog
 
+### v0.7.0 (March 2026)
+- **9 oscillator engines** — mode button cycles: WT → GR → Sine → Saw → SuperSaw → Square → Triangle → SawTri → Noise. MORPH knob repurposed: SuperSaw = detune spread, Square = pulse width.
+- **Per-oscillator octave** — `< OCT >` spinner (±3 oct) in each oscillator label column, stacks on TUNE
+- **Full mod matrix (24 targets)** — LFO1/LFO2/Velocity/ModWheel → Cutoff, Res, Drive, Pitch, Amp, Osc1-3 Morph/Tune/Fine/Level/FM/Detune, LFO2 Rate
+- **Per-lane arpeggiator** — each lane has independent ARP on/off, mode (7 modes incl. Converge/Diverge), rate (1/4–1/32), octave spread
+- **Pattern randomize** — `[RND]` button per lane generates scale-aware random steps with accent bias, velocity curves, ghost note probabilities, microtiming humanisation
+
 ### v0.6.0 (March 2026)
 - **Granular engine** — per-oscillator [WT|GR] toggle. MORPH → grain position scan. DENSITY, SIZE, SPRAY, PITCH SCATTER knobs. Uses current wavetable bank as grain source.
 - **Spectral warp** — per-oscillator warp mode (None/Phase Bend/Smear/Mirror) + WARP AMT knob. WavetableDisplay shows PB/SM/MR badge.
@@ -253,7 +262,7 @@ See **[SPEC.md](SPEC.md)** for full DSP notes, class hierarchy, and signal flow 
 
 ### v0.4.0 (March 2026)
 - **Step sequencer** — 4 polyrhythmic lanes, per-step probability, microtiming, gate length
-- **Arpeggiator** — Up/Down/UpDown/Random/As Played, 1–4 octave range
+- **Arpeggiator** — Per-lane: Up/Down/UpDown/Random/AsPlayed/Converge/Diverge, rate 1/4–1/32, 1–4 octaves. **[RND]** randomizes lane pattern to current scale.
 - **Scale quantization** — 12 scales, snaps all sequencer notes
 - **SEQUENCER tab** added alongside SYNTH / EFFECTS
 
