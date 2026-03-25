@@ -75,6 +75,10 @@ float AnalogOscillator::processSingle(float phase, float dt) const {
                 + (2.f * std::abs(2.f * phase - 1.f) - 1.f) * 0.5f;
             out -= polyBLEP(phase, dt) * 0.5f;
             break;
+        case OscWaveform::Noise:
+            // White noise — phase ignored; uses rng_ at call site
+            out = 0.f;
+            break;
     }
     return out;
 }
@@ -87,6 +91,9 @@ void AnalogOscillator::updateDrift() {
 }
 
 float AnalogOscillator::process() {
+    if (waveform_ == OscWaveform::Noise)
+        return (rng_.nextFloat() * 2.f - 1.f) * gain_;
+
     updateDrift();
     float driftHz = frequency_ * (std::pow(2.f, driftValue_ / 1200.f) - 1.f);
     float fmHz    = fmAmount_ * fmInput_ * frequency_;

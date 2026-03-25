@@ -46,14 +46,33 @@ void SequencerPanel::resized() {
         int lH = bounds.getHeight() / (nL - l);
         auto lBounds = bounds.removeFromTop(lH);
 
-        // Lane header
-        auto lHdr = lBounds.removeFromLeft(kLaneHdrW);
-        int lx = lHdr.getX() + 4, ly = lHdr.getCentreY();
-        laneActiveR_[l] = { lx, ly - 10, 16, 20 };
-        stepsDecR_  [l] = { lx + 20, ly - 10, 18, 18 };
-        stepsIncR_  [l] = { lx + 55, ly - 10, 18, 18 };
-        octDecR_    [l] = { lx + 20, ly + 12, 18, 18 };
-        octIncR_    [l] = { lx + 55, ly + 12, 18, 18 };
+        // Lane header — 4-row layout
+        auto lHdr = lBounds.removeFromLeft(kLaneHdrW).reduced(3, 2);
+        const int rowH = lHdr.getHeight() / 4;
+        const int px   = lHdr.getX();
+
+        // Row 0: Lane label + [RND] button
+        auto row0 = lHdr.removeFromTop(rowH);
+        laneActiveR_[l]  = { px, row0.getCentreY() - 8, 14, 16 };
+        laneRndBtnR_[l]  = { lHdr.getRight() - 38, row0.getY(), 38, rowH - 2 };
+
+        // Row 1: Steps spinner
+        auto row1 = lHdr.removeFromTop(rowH);
+        stepsDecR_[l] = { px + 18, row1.getCentreY() - 9, 18, 18 };
+        stepsIncR_[l] = { px + 60, row1.getCentreY() - 9, 18, 18 };
+
+        // Row 2: Octave spinner
+        auto row2 = lHdr.removeFromTop(rowH);
+        octDecR_[l] = { px + 18, row2.getCentreY() - 9, 18, 18 };
+        octIncR_[l] = { px + 60, row2.getCentreY() - 9, 18, 18 };
+
+        // Row 3: Per-lane ARP controls: [ARP] [mode] [rate] [oct]
+        auto row3 = lHdr;
+        const int aw = (row3.getWidth()) / 4 - 2;
+        laneArpBtnR_ [l] = { row3.getX(),              row3.getY(), aw,     row3.getHeight() - 2 };
+        laneArpModeR_[l] = { row3.getX() + aw + 2,    row3.getY(), aw + 8, row3.getHeight() - 2 };
+        laneArpRateR_[l] = { row3.getX() + aw*2 + 12, row3.getY(), aw,     row3.getHeight() - 2 };
+        laneArpOctR_ [l] = { row3.getX() + aw*3 + 14, row3.getY(), aw,     row3.getHeight() - 2 };
 
         // Step grid
         rebuildStepRects(lBounds.reduced(2), l);
@@ -150,10 +169,7 @@ void SequencerPanel::drawGlobalControls(juce::Graphics& g) {
                juce::Justification::centred);
     btn(lanesIncR_, ">", false);
 
-    // Arp
-    btn(arpBtnR_, "ARP", seq_.arpEnabled, juce::Colour(0xFFFF9800));
-    if (seq_.arpEnabled)
-        btn(arpModeR_, ArpMode::kNames[seq_.arpMode % ArpMode::Count], true, juce::Colour(0xFFFF9800));
+    // (ARP controls moved to per-lane header)
 }
 
 void SequencerPanel::drawLane(juce::Graphics& g, int laneIdx, juce::Rectangle<int> bounds) {
@@ -167,16 +183,35 @@ void SequencerPanel::drawLane(juce::Graphics& g, int laneIdx, juce::Rectangle<in
     g.setColour(lc.withAlpha(0.3f));
     g.drawRoundedRectangle(lHdr.toFloat().reduced(1.5f), 4.f, 1.f);
 
-    // Lane label
+    // ── Lane header contents ──────────────────────────────────────────────────
+    auto smallBtn = [&](juce::Rectangle<int> r, const juce::String& label,
+                        bool active, juce::Colour c) {
+        g.setColour(active ? c.withAlpha(0.28f) : juce::Colour(0xFF171727));
+        g.fillRoundedRectangle(r.toFloat(), 3.f);
+        g.setColour(active ? c : juce::Colour(0xFF405060));
+        g.drawRoundedRectangle(r.toFloat().reduced(0.4f), 3.f, 0.8f);
+        g.setFont(juce::Font(8.5f, juce::Font::bold));
+        g.setColour(active ? c : juce::Colour(0xFF708090));
+        g.drawText(label, r, juce::Justification::centred);
+    };
+
+    // Row 0: "LANE N" + active dot + [RND]
     g.setFont(juce::Font(9.f, juce::Font::bold));
     g.setColour(lc);
     g.drawText("LANE " + juce::String(laneIdx + 1),
-               lHdr.getX(), lHdr.getY() + 4, kLaneHdrW, 14, juce::Justification::centred);
+               lHdr.getX() + 18, lHdr.getY() + 2, kLaneHdrW - 60, 16, juce::Justification::centredLeft);
+    // Active dot
+    auto& adr = laneActiveR_[laneIdx];
+    g.setColour(lane.active ? lc : juce::Colour(0xFF334455));
+    g.fillEllipse(adr.toFloat().reduced(3));
 
-    // Steps spinner
+    // [RND] button — orange accent
+    smallBtn(laneRndBtnR_[laneIdx], "RND", false, juce::Colour(0xFFFF9800));
+
+    // Row 1: Steps spinner
     auto drawSpinner = [&](juce::Rectangle<int> dec, juce::Rectangle<int> inc,
                             const juce::String& val, const juce::String& lbl) {
-        g.setColour(juce::Colour(0xFF1E2030));
+        g.setColour(juce::Colour(0xFF1A1A2C));
         g.fillRoundedRectangle(dec.toFloat(), 3.f);
         g.fillRoundedRectangle(inc.toFloat(), 3.f);
         g.setColour(lc.withAlpha(0.6f));
@@ -189,12 +224,37 @@ void SequencerPanel::drawLane(juce::Graphics& g, int laneIdx, juce::Rectangle<in
                    juce::Justification::centred);
         g.setFont(juce::Font(7.5f));
         g.setColour(juce::Colour(0xFF607080));
-        g.drawText(lbl, dec.getX(), dec.getY() - 12, kLaneHdrW - 8, 10, juce::Justification::centred);
+        g.drawText(lbl, dec.getX() - 2, dec.getY(), 18, dec.getHeight(), juce::Justification::centredRight);
     };
 
-    drawSpinner(stepsDecR_[laneIdx], stepsIncR_[laneIdx], juce::String(lane.numSteps), "STEPS");
+    drawSpinner(stepsDecR_[laneIdx], stepsIncR_[laneIdx], juce::String(lane.numSteps), "STP");
     drawSpinner(octDecR_[laneIdx], octIncR_[laneIdx],
                 juce::String(lane.octave > 0 ? "+" : "") + juce::String(lane.octave), "OCT");
+
+    // Row 3: Per-lane ARP controls
+    const juce::Colour arpCol(0xFFFF9800);
+    smallBtn(laneArpBtnR_[laneIdx], "ARP", lane.arpEnabled, arpCol);
+
+    // ARP mode button
+    if (lane.arpEnabled) {
+        smallBtn(laneArpModeR_[laneIdx], ArpMode::kNames[lane.arpMode % ArpMode::Count], true, arpCol);
+        // ARP rate
+        static const char* rateNames[] = { "1/4","1/8","1/16","1/32" };
+        static const int   rateDivs[]  = { 4, 8, 16, 32 };
+        int rateNameIdx = 2; // default 1/16
+        for (int ri = 0; ri < 4; ++ri) if (rateDivs[ri] == lane.arpRateDiv) { rateNameIdx = ri; break; }
+        smallBtn(laneArpRateR_[laneIdx], rateNames[rateNameIdx], true, arpCol);
+        // ARP octaves
+        smallBtn(laneArpOctR_[laneIdx], juce::String(lane.arpOctaves) + "oct", true, arpCol);
+    } else {
+        g.setColour(juce::Colour(0xFF243040));
+        g.fillRoundedRectangle(laneArpModeR_[laneIdx].toFloat(), 3.f);
+        g.setFont(juce::Font(8.f));
+        g.setColour(juce::Colour(0xFF405060));
+        g.drawText(ArpMode::kNames[lane.arpMode % ArpMode::Count], laneArpModeR_[laneIdx], juce::Justification::centred);
+        g.fillRoundedRectangle(laneArpRateR_[laneIdx].toFloat(), 3.f);
+        g.fillRoundedRectangle(laneArpOctR_[laneIdx].toFloat(), 3.f);
+    }
 
     // Step grid bg
     g.setColour(juce::Colour(0xFF0E0E1C));
@@ -348,11 +408,54 @@ void SequencerPanel::mouseDown(const juce::MouseEvent& e) {
     }
 
     // Check lane header controls
+    static const int rateDivs[] = { 4, 8, 16, 32 };
     for (int l = 0; l < seq_.numActiveLanes; ++l) {
-        if (stepsDecR_[l].contains(pt)) { seq_.lanes[l].numSteps = juce::jlimit(1, SequencerLane::kMaxSteps, seq_.lanes[l].numSteps - 1); resized(); repaint(); if(onStateChanged) onStateChanged(); return; }
-        if (stepsIncR_[l].contains(pt)) { seq_.lanes[l].numSteps = juce::jlimit(1, SequencerLane::kMaxSteps, seq_.lanes[l].numSteps + 1); resized(); repaint(); if(onStateChanged) onStateChanged(); return; }
-        if (octDecR_[l].contains(pt))   { seq_.lanes[l].octave   = juce::jlimit(-3, 3, seq_.lanes[l].octave - 1); repaint(); if(onStateChanged) onStateChanged(); return; }
-        if (octIncR_[l].contains(pt))   { seq_.lanes[l].octave   = juce::jlimit(-3, 3, seq_.lanes[l].octave + 1); repaint(); if(onStateChanged) onStateChanged(); return; }
+        auto& lane = seq_.lanes[l];
+
+        if (stepsDecR_[l].contains(pt)) { lane.numSteps = juce::jlimit(1, SequencerLane::kMaxSteps, lane.numSteps - 1); resized(); repaint(); if(onStateChanged) onStateChanged(); return; }
+        if (stepsIncR_[l].contains(pt)) { lane.numSteps = juce::jlimit(1, SequencerLane::kMaxSteps, lane.numSteps + 1); resized(); repaint(); if(onStateChanged) onStateChanged(); return; }
+        if (octDecR_[l].contains(pt))   { lane.octave   = juce::jlimit(-3, 3, lane.octave - 1); repaint(); if(onStateChanged) onStateChanged(); return; }
+        if (octIncR_[l].contains(pt))   { lane.octave   = juce::jlimit(-3, 3, lane.octave + 1); repaint(); if(onStateChanged) onStateChanged(); return; }
+        if (laneActiveR_[l].contains(pt)){ lane.active  = !lane.active; repaint(); if(onStateChanged) onStateChanged(); return; }
+
+        // [RND] — randomize this lane's step pattern
+        if (laneRndBtnR_[l].contains(pt)) {
+            seq_.randomizeLane(l);
+            repaint();
+            if(onStateChanged) onStateChanged();
+            return;
+        }
+
+        // [ARP] toggle
+        if (laneArpBtnR_[l].contains(pt)) {
+            lane.arpEnabled = !lane.arpEnabled;
+            repaint();
+            if(onStateChanged) onStateChanged();
+            return;
+        }
+        // ARP mode cycle
+        if (laneArpModeR_[l].contains(pt)) {
+            lane.arpMode = (lane.arpMode + 1) % ArpMode::Count;
+            repaint();
+            if(onStateChanged) onStateChanged();
+            return;
+        }
+        // ARP rate cycle: 4 → 8 → 16 → 32 → 4
+        if (laneArpRateR_[l].contains(pt)) {
+            int cur = 2;
+            for (int ri = 0; ri < 4; ++ri) if (rateDivs[ri] == lane.arpRateDiv) { cur = ri; break; }
+            lane.arpRateDiv = rateDivs[(cur + 1) % 4];
+            repaint();
+            if(onStateChanged) onStateChanged();
+            return;
+        }
+        // ARP octaves cycle: 1–4
+        if (laneArpOctR_[l].contains(pt)) {
+            lane.arpOctaves = (lane.arpOctaves % 4) + 1;
+            repaint();
+            if(onStateChanged) onStateChanged();
+            return;
+        }
     }
 
     // Check step cells
@@ -422,10 +525,6 @@ void SequencerPanel::handleGlobalClick(juce::Point<int> pt) {
     } else if (lanesIncR_.contains(pt)) {
         seq_.numActiveLanes = juce::jmin(Sequencer::kMaxLanes, seq_.numActiveLanes + 1);
         resized();
-    } else if (arpBtnR_.contains(pt)) {
-        seq_.arpEnabled = !seq_.arpEnabled;
-    } else if (arpModeR_.contains(pt) && seq_.arpEnabled) {
-        seq_.arpMode = (seq_.arpMode + 1) % ArpMode::Count;
     }
     if(onStateChanged) onStateChanged();
     repaint();

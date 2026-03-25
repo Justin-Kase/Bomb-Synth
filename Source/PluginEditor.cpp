@@ -136,8 +136,9 @@ OscStrip::OscStrip(int idx) : index_(idx) {
     modeBtn.setColour(juce::TextButton::textColourOnId,   BCol::green);
     modeBtn.setClickingTogglesState(false);
     modeBtn.onClick = [this] {
-        setGranMode(!granMode_);
-        if (onModeChanged) onModeChanged(granMode_);
+        int next = (engineIdx_ + 1) % OscEngine::Count;
+        setEngineIdx(next);
+        if (onModeChanged) onModeChanged(engineIdx_);
     };
     addAndMakeVisible(modeBtn);
 
@@ -162,16 +163,32 @@ OscStrip::~OscStrip() {
     morphKnob.slider.removeListener(this);
 }
 
-void OscStrip::setGranMode(bool gran) {
-    granMode_ = gran;
-    modeBtn.setButtonText(gran ? "GR" : "WT");
-    modeBtn.setToggleState(gran, juce::dontSendNotification);
-    morphKnob.label.setText(gran ? "POS" : "MORPH", juce::dontSendNotification);
+void OscStrip::setEngineIdx(int idx) {
+    engineIdx_ = idx;
+    modeBtn.setButtonText(OscEngine::kNames[idx]);
 
+    const bool isWT  = (idx == OscEngine::WT);
+    const bool isGR  = (idx == OscEngine::GR);
+    const bool isSS  = (idx == OscEngine::SuperSaw);
+    const bool isSQ  = (idx == OscEngine::Square);
+    const bool isAnalog = (!isWT && !isGR);
+
+    // MORPH label changes by mode
+    if (isGR)       morphKnob.label.setText("POS",    juce::dontSendNotification);
+    else if (isSS)  morphKnob.label.setText("DETUNE", juce::dontSendNotification);
+    else if (isSQ)  morphKnob.label.setText("PW",     juce::dontSendNotification);
+    else            morphKnob.label.setText("MORPH",  juce::dontSendNotification);
+
+    // Show standard knobs for WT/analog; granular knobs only for GR
     for (auto* k : { &tuneKnob, &fineKnob, &fmKnob, &unisonKnob, &detuneKnob })
-        k->setVisible(!gran);
+        k->setVisible(!isGR);
     for (auto* k : { &densityKnob, &sizeKnob, &sprayKnob, &pitchScKnob })
-        k->setVisible(gran);
+        k->setVisible(isGR);
+
+    // Display and warp only relevant in WT/GR
+    display.setVisible(isWT || isGR);
+    warpModeBtn.setVisible(isWT);
+    warpAmtKnob.setVisible(isWT);
     resized();
 }
 
@@ -271,7 +288,7 @@ void OscStrip::resized() {
     b.removeFromLeft(4);
 
     // Remaining knob slots
-    if (!granMode_) {
+    if (engineIdx_ != OscEngine::GR) {
         BKnob* knobs[] = { &morphKnob, &tuneKnob, &fineKnob,
                             &levelKnob, &fmKnob, &unisonKnob, &detuneKnob };
         const int nk = 7;
@@ -343,8 +360,8 @@ BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProce
         oscWarpAmtAtt_  [i]= std::make_unique<SA>(par, warpAmtIds[i],oscs_[i].warpAmtKnob.slider);
 
         // Restore engine mode from stored param
-        bool isGran = ((int)par.getRawParameterValue(engineIds[i])->load() != 0);
-        if (isGran) oscs_[i].setGranMode(true);
+        int storedEngine = (int)par.getRawParameterValue(engineIds[i])->load();
+        oscs_[i].setEngineIdx(storedEngine);
 
         // Restore warp mode display from stored param
         int storedWarpMode = (int)par.getRawParameterValue(warpMdIds[i])->load();
@@ -352,9 +369,11 @@ BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProce
 
         // Mode button → APVTS engine param
         const juce::String engParamId = engineIds[i];
-        oscs_[i].onModeChanged = [this, engParamId](bool gran) {
-            if (auto* param = proc_.parameters().getParameter(engParamId))
-                param->setValueNotifyingHost(gran ? 1.f : 0.f);
+        oscs_[i].onModeChanged = [this, engParamId](int engineIdx) {
+            if (auto* param = proc_.parameters().getParameter(engParamId)) {
+                auto* rp = dynamic_cast<juce::RangedAudioParameter*>(param);
+                if (rp) param->setValueNotifyingHost(rp->getNormalisableRange().convertTo0to1((float)engineIdx));
+            }
         };
 
         // Octave spinner → APVTS osc{n}_oct param
@@ -622,8 +641,8 @@ void BombSynthAudioProcessorEditor::timerCallback() {
         int wm = getI(warpMdIds[i]);
         if (wm != oscs_[i].warpModeVal())   oscs_[i].setWarpModeDisplay(wm);
         oscs_[i].display.setWarpAmt(getF(warpAmtIds[i]));
-        bool gran = (getI(engineIds[i]) != 0);
-        if (gran != oscs_[i].granMode())    oscs_[i].setGranMode(gran);
+        int engIdx = getI(engineIds[i]);
+        if (engIdx != oscs_[i].engineIdx()) oscs_[i].setEngineIdx(engIdx);
     }
 }
 

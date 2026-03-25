@@ -20,7 +20,9 @@ public:
     void setFilterType(int t);
 
     // Oscillator engine type
-    void setOscEngine(int oscIdx, OscEngineType t);
+    void setOscEngine   (int oscIdx, OscEngineType t);
+    void setOscEngineIdx(int oscIdx, int engineIdx)
+        { for (auto& v : voices_) v.setOscEngineIdx(oscIdx, engineIdx); }
 
     // Wavetable control — forwarded to all voices
     void setOscBankIndex(int oscIdx, int bankIdx);

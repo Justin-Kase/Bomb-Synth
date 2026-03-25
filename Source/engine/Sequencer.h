@@ -51,8 +51,10 @@ namespace SeqScale {
 
 // ─── Arpeggiator ─────────────────────────────────────────────────────────────
 namespace ArpMode {
-    enum { Up=0, Down, UpDown, Random, AsPlayed, Count };
-    static constexpr const char* kNames[] = { "Up","Down","Up/Down","Random","As Played" };
+    enum { Up=0, Down, UpDown, Random, AsPlayed, Converge, Diverge, Count };
+    static constexpr const char* kNames[] = {
+        "Up","Down","Up/Down","Random","As Played","Converge","Diverge"
+    };
 }
 
 // ─── Step data ────────────────────────────────────────────────────────────────
@@ -76,6 +78,17 @@ struct SequencerLane {
     int  midiChannel = 1;       // 1-16
     float swing      = 0.0f;   // 0-1 swing amount
 
+    // Per-lane arpeggiator
+    bool arpEnabled  = false;
+    int  arpMode     = ArpMode::Up;
+    int  arpRateDiv  = 16;      // 4=1/4, 8=1/8, 16=1/16, 32=1/32
+    int  arpOctaves  = 1;       // 1-4 octave spread
+
+    // Per-lane held notes & arp state (updated live)
+    std::vector<int> heldNotes;
+    std::vector<int> arpSequence;
+    int  arpStep     = 0;
+
     // Pending note-off tracking
     int    pendingNoteOff     = -1;
     double pendingNoteOffPos  = -1.0;  // in absolute samples
@@ -95,11 +108,7 @@ public:
     float bpm        = 120.f;
     bool  syncDAW    = true;
 
-    // Arpeggiator
-    bool arpEnabled  = false;
-    int  arpMode     = ArpMode::Up;
-    int  arpOctaves  = 1;
-    int  arpRateDiv  = 4;     // denominator: 4=1/4, 8=1/8, 16=1/16, 32=1/32
+    // (global arp moved to per-lane)
 
     // ── Init ──────────────────────────────────────────────────────────────────
     Sequencer() {
@@ -184,62 +193,71 @@ public:
             auto& lane = lanes[laneIdx];
             if (!lane.active) continue;
 
-            // Calculate effective step duration (with swing for even steps)
+            // Per-lane step duration (arp uses own rate div; seq uses global 1/16)
+            const double laneStepDur = lane.arpEnabled ? arpStepDur(lane) : stepDurSamples;
+
             double pos = stepPos_;
             double end = pos + numSamples;
 
             while (pos < end) {
-                // Swing: even steps are slightly longer, odd steps shorter
                 double swingFactor = ((lane.currentStep % 2 == 0) && lane.swing > 0.f)
                     ? (1.0 + lane.swing * 0.33)
                     : (1.0 - lane.swing * 0.33);
-                double thisStepDur = stepDurSamples * swingFactor;
-
-                // When does current step end?
-                double stepEndPos = std::floor(pos / thisStepDur) * thisStepDur + thisStepDur;
-
-                // Check if this step fires in this buffer
-                double stepStartPos = stepEndPos - thisStepDur;
+                double thisStepDur = laneStepDur * swingFactor;
+                double stepEndPos  = std::floor(pos / thisStepDur) * thisStepDur + thisStepDur;
+                double stepStartPos= stepEndPos - thisStepDur;
 
                 if (stepStartPos >= pos && stepStartPos < end) {
-                    const auto& step = lane.steps[lane.currentStep];
-
-                    // Microtiming: offset trigger point
-                    double utimeSamples = step.utime * thisStepDur;
-                    double triggerPos = stepStartPos + utimeSamples;
-                    int    sampleOffset = juce::jlimit(0, numSamples - 1,
-                                                       (int)(triggerPos - stepPos_));
-
                     // Send pending note-off if it falls in this buffer
                     if (lane.pendingNoteOff >= 0 && lane.pendingNoteOffPos >= stepPos_
                         && lane.pendingNoteOffPos < stepPos_ + numSamples) {
-                        int offSmp = (int)(lane.pendingNoteOffPos - stepPos_);
-                        midi.addEvent(juce::MidiMessage::noteOff(lane.midiChannel, lane.pendingNoteOff),
-                                      offSmp);
+                        int offSmp = juce::jlimit(0, numSamples - 1, (int)(lane.pendingNoteOffPos - stepPos_));
+                        midi.addEvent(juce::MidiMessage::noteOff(lane.midiChannel, lane.pendingNoteOff), offSmp);
                         lane.pendingNoteOff = -1;
                     }
 
-                    // Fire step if gate on and probability check passes
-                    if (step.gate && rng_.nextFloat() <= step.prob) {
-                        // Quantize note to scale
-                        int raw  = step.note + lane.octave * 12;
-                        int note = SeqScale::quantize(juce::jlimit(0, 127, raw), rootNote, scaleIdx);
-                        int vel  = juce::jlimit(1, 127, (int)(step.vel * 127.f));
+                    if (lane.arpEnabled) {
+                        // ── ARP mode: fire next arp note ──────────────────────
+                        if (!lane.arpSequence.empty()) {
+                            int sampleOffset = juce::jlimit(0, numSamples - 1, (int)(stepStartPos - stepPos_));
+                            int rawNote = lane.arpSequence[lane.arpStep % (int)lane.arpSequence.size()];
+                            int note    = SeqScale::quantize(juce::jlimit(0, 127, rawNote), rootNote, scaleIdx);
+                            int vel     = 100;
 
-                        // Note-off previous note
-                        if (lane.pendingNoteOff >= 0) {
-                            midi.addEvent(juce::MidiMessage::noteOff(lane.midiChannel, lane.pendingNoteOff),
-                                          sampleOffset);
+                            if (lane.arpMode == ArpMode::Random)
+                                lane.arpStep = rng_.nextInt((int)lane.arpSequence.size());
+                            else
+                                lane.arpStep = (lane.arpStep + 1) % (int)lane.arpSequence.size();
+
+                            if (lane.pendingNoteOff >= 0)
+                                midi.addEvent(juce::MidiMessage::noteOff(lane.midiChannel, lane.pendingNoteOff), sampleOffset);
+                            midi.addEvent(juce::MidiMessage::noteOn(lane.midiChannel, note, (uint8_t)vel), sampleOffset);
+
+                            lane.pendingNoteOff    = note;
+                            lane.pendingNoteOffPos = stepPos_ + sampleOffset + 0.85 * thisStepDur;
                         }
-                        midi.addEvent(juce::MidiMessage::noteOn(lane.midiChannel, note, (uint8_t)vel),
-                                      sampleOffset);
+                        lane.currentStep = (lane.currentStep + 1) % lane.numSteps;
+                    } else {
+                        // ── SEQ mode: fire step pattern ───────────────────────
+                        const auto& step = lane.steps[lane.currentStep];
+                        double utimeSamples = step.utime * thisStepDur;
+                        double triggerPos   = stepStartPos + utimeSamples;
+                        int    sampleOffset = juce::jlimit(0, numSamples - 1, (int)(triggerPos - stepPos_));
 
-                        lane.pendingNoteOff    = note;
-                        lane.pendingNoteOffPos = stepPos_ + sampleOffset + step.gateLen * thisStepDur;
+                        if (step.gate && rng_.nextFloat() <= step.prob) {
+                            int raw  = step.note + lane.octave * 12;
+                            int note = SeqScale::quantize(juce::jlimit(0, 127, raw), rootNote, scaleIdx);
+                            int vel  = juce::jlimit(1, 127, (int)(step.vel * 127.f));
+
+                            if (lane.pendingNoteOff >= 0)
+                                midi.addEvent(juce::MidiMessage::noteOff(lane.midiChannel, lane.pendingNoteOff), sampleOffset);
+                            midi.addEvent(juce::MidiMessage::noteOn(lane.midiChannel, note, (uint8_t)vel), sampleOffset);
+
+                            lane.pendingNoteOff    = note;
+                            lane.pendingNoteOffPos = stepPos_ + sampleOffset + step.gateLen * thisStepDur;
+                        }
+                        lane.currentStep = (lane.currentStep + 1) % lane.numSteps;
                     }
-
-                    // Advance to next step
-                    lane.currentStep = (lane.currentStep + 1) % lane.numSteps;
                 }
 
                 pos = stepEndPos;
@@ -249,10 +267,8 @@ public:
             if (lane.pendingNoteOff >= 0
                 && lane.pendingNoteOffPos >= stepPos_
                 && lane.pendingNoteOffPos < stepPos_ + numSamples) {
-                int offSmp = juce::jlimit(0, numSamples - 1,
-                                          (int)(lane.pendingNoteOffPos - stepPos_));
-                midi.addEvent(juce::MidiMessage::noteOff(lane.midiChannel, lane.pendingNoteOff),
-                              offSmp);
+                int offSmp = juce::jlimit(0, numSamples - 1, (int)(lane.pendingNoteOffPos - stepPos_));
+                midi.addEvent(juce::MidiMessage::noteOff(lane.midiChannel, lane.pendingNoteOff), offSmp);
                 lane.pendingNoteOff = -1;
             }
         }
@@ -260,15 +276,76 @@ public:
         stepPos_ += numSamples;
     }
 
-    // ── Arpeggiator: track held notes ─────────────────────────────────────────
-    void arpNoteOn(int note)  {
-        if (std::find(heldNotes_.begin(), heldNotes_.end(), note) == heldNotes_.end())
-            heldNotes_.push_back(note);
-        rebuildArpSequence();
+    // ── Arpeggiator: track held notes (per-lane) ─────────────────────────────
+    void arpNoteOn(int note, int laneIdx = -1) {
+        auto applyTo = [&](SequencerLane& lane) {
+            if (std::find(lane.heldNotes.begin(), lane.heldNotes.end(), note) == lane.heldNotes.end())
+                lane.heldNotes.push_back(note);
+            rebuildArpSequence(lane);
+        };
+        if (laneIdx < 0) { for (auto& l : lanes) if (l.arpEnabled) applyTo(l); }
+        else if (laneIdx < kMaxLanes) applyTo(lanes[laneIdx]);
     }
-    void arpNoteOff(int note) {
-        heldNotes_.erase(std::remove(heldNotes_.begin(), heldNotes_.end(), note), heldNotes_.end());
-        rebuildArpSequence();
+    void arpNoteOff(int note, int laneIdx = -1) {
+        auto applyTo = [&](SequencerLane& lane) {
+            lane.heldNotes.erase(std::remove(lane.heldNotes.begin(), lane.heldNotes.end(), note), lane.heldNotes.end());
+            rebuildArpSequence(lane);
+        };
+        if (laneIdx < 0) { for (auto& l : lanes) if (l.arpEnabled) applyTo(l); }
+        else if (laneIdx < kMaxLanes) applyTo(lanes[laneIdx]);
+    }
+
+    // ── Randomize a lane's step pattern ───────────────────────────────────────
+    // Generates musically coherent random steps using current scale/root.
+    void randomizeLane(int laneIdx) {
+        if (laneIdx < 0 || laneIdx >= kMaxLanes) return;
+        auto& lane = lanes[laneIdx];
+        const int n = lane.numSteps;
+
+        // Build pool of available scale notes across 2 octaves
+        std::vector<int> pool;
+        for (int oct = 0; oct < 2; ++oct)
+            for (int i = 0; i < 12; ++i) {
+                int candidate = rootNote + oct * 12 + i;
+                int q = SeqScale::quantize(candidate, rootNote, scaleIdx);
+                if (q == candidate && candidate >= 36 && candidate <= 96)
+                    pool.push_back(candidate);
+            }
+        if (pool.empty()) { pool = {60,62,64,67,69}; }  // fallback C Major penta
+
+        // Random gate density: 50-85%
+        const float density = 0.50f + rng_.nextFloat() * 0.35f;
+
+        for (int s = 0; s < n; ++s) {
+            auto& step = lane.steps[s];
+
+            // Gate: accented beats always on, others by density
+            bool accentBeat = (s % 4 == 0);
+            step.gate  = accentBeat || (rng_.nextFloat() < density);
+
+            // Note: pull from scale pool, bias toward root on beat 1
+            if (s == 0)
+                step.note = rootNote + lane.octave * 12;
+            else
+                step.note = pool[rng_.nextInt((int)pool.size())] + lane.octave * 12;
+            step.note = juce::jlimit(0, 127, step.note);
+
+            // Velocity: accented beats louder, with variation
+            if (accentBeat)
+                step.vel = 0.75f + rng_.nextFloat() * 0.25f;
+            else
+                step.vel = 0.45f + rng_.nextFloat() * 0.40f;
+
+            // Probability: 90-100% usually, occasional 40-60% ghost note
+            step.prob = (rng_.nextFloat() < 0.15f) ? (0.4f + rng_.nextFloat() * 0.25f) : 1.0f;
+
+            // Microtiming: subtle humanisation on non-accents
+            step.utime = accentBeat ? 0.0f : (rng_.nextFloat() - 0.5f) * 0.08f;
+
+            // Gate length: short on some steps for staccato, long on accents
+            step.gateLen = accentBeat ? (0.7f + rng_.nextFloat() * 0.25f)
+                                      : (0.3f + rng_.nextFloat() * 0.55f);
+        }
     }
 
     // ── State ─────────────────────────────────────────────────────────────────
@@ -282,18 +359,19 @@ public:
         xml->setAttribute("scale",    scaleIdx);
         xml->setAttribute("bpm",      bpm);
         xml->setAttribute("syncDAW",  syncDAW);
-        xml->setAttribute("arpEnabled", arpEnabled);
-        xml->setAttribute("arpMode",  arpMode);
-        xml->setAttribute("arpOct",   arpOctaves);
-        xml->setAttribute("arpRate",  arpRateDiv);
+        // (arp settings now per-lane)
 
         for (int l = 0; l < kMaxLanes; ++l) {
             auto* lx = new juce::XmlElement("Lane");
-            lx->setAttribute("idx",      l);
-            lx->setAttribute("numSteps", lanes[l].numSteps);
-            lx->setAttribute("active",   lanes[l].active);
-            lx->setAttribute("octave",   lanes[l].octave);
-            lx->setAttribute("swing",    lanes[l].swing);
+            lx->setAttribute("idx",        l);
+            lx->setAttribute("numSteps",  lanes[l].numSteps);
+            lx->setAttribute("active",    lanes[l].active);
+            lx->setAttribute("octave",    lanes[l].octave);
+            lx->setAttribute("swing",     lanes[l].swing);
+            lx->setAttribute("arpEn",     lanes[l].arpEnabled);
+            lx->setAttribute("arpMode",   lanes[l].arpMode);
+            lx->setAttribute("arpRate",   lanes[l].arpRateDiv);
+            lx->setAttribute("arpOct",    lanes[l].arpOctaves);
             for (int s = 0; s < SequencerLane::kMaxSteps; ++s) {
                 auto* sx = new juce::XmlElement("Step");
                 const auto& step = lanes[l].steps[s];
@@ -317,18 +395,18 @@ public:
         scaleIdx   = xml->getIntAttribute("scale",    1);
         bpm        = (float)xml->getDoubleAttribute("bpm", 120.0);
         syncDAW    = xml->getBoolAttribute("syncDAW", true);
-        arpEnabled = xml->getBoolAttribute("arpEnabled", false);
-        arpMode    = xml->getIntAttribute("arpMode",  0);
-        arpOctaves = xml->getIntAttribute("arpOct",   1);
-        arpRateDiv = xml->getIntAttribute("arpRate",  16);
 
         for (auto* lx : xml->getChildWithTagNameIterator("Lane")) {
             int l = lx->getIntAttribute("idx", 0);
             if (l < 0 || l >= kMaxLanes) continue;
-            lanes[l].numSteps = lx->getIntAttribute("numSteps", 8);
-            lanes[l].active   = lx->getBoolAttribute("active", l < 2);
-            lanes[l].octave   = lx->getIntAttribute("octave", 0);
-            lanes[l].swing    = (float)lx->getDoubleAttribute("swing", 0.0);
+            lanes[l].numSteps   = lx->getIntAttribute("numSteps", 8);
+            lanes[l].active     = lx->getBoolAttribute("active", l < 2);
+            lanes[l].octave     = lx->getIntAttribute("octave", 0);
+            lanes[l].swing      = (float)lx->getDoubleAttribute("swing", 0.0);
+            lanes[l].arpEnabled = lx->getBoolAttribute("arpEn",   false);
+            lanes[l].arpMode    = lx->getIntAttribute("arpMode",  ArpMode::Up);
+            lanes[l].arpRateDiv = lx->getIntAttribute("arpRate",  16);
+            lanes[l].arpOctaves = lx->getIntAttribute("arpOct",   1);
             int s = 0;
             for (auto* sx : lx->getChildWithTagNameIterator("Step")) {
                 if (s >= SequencerLane::kMaxSteps) break;
@@ -345,50 +423,78 @@ public:
 
 private:
     double sampleRate_    = 44100.0;
-    double samplesPerStep_= 0.0;
+    double samplesPerStep_= 0.0;   // base 1/16 step
     double stepPos_       = 0.0;   // absolute sample counter
     juce::Random rng_;
-    std::vector<int> heldNotes_;
-    std::vector<int> arpSequence_;
-    int arpStep_ = 0;
 
     void updateTiming() {
-        // 1/16 note = 1 beat / 4
-        samplesPerStep_ = (60.0 / bpm) * sampleRate_ / 4.0;
+        samplesPerStep_ = (60.0 / bpm) * sampleRate_ / 4.0;  // 1/16 note
     }
 
-    void rebuildArpSequence() {
-        arpSequence_.clear();
-        if (heldNotes_.empty()) return;
+    // Samples per step for a lane's arp rate division
+    double arpStepDur(const SequencerLane& lane) const {
+        // arpRateDiv: 4=quarter, 8=eighth, 16=sixteenth, 32=thirty-second
+        return (60.0 / bpm) * sampleRate_ * 4.0 / lane.arpRateDiv;
+    }
 
-        auto notes = heldNotes_;
+    void rebuildArpSequence(SequencerLane& lane) {
+        lane.arpSequence.clear();
+        if (lane.heldNotes.empty()) return;
+
+        auto notes = lane.heldNotes;
         std::sort(notes.begin(), notes.end());
 
-        switch (arpMode) {
-            case ArpMode::Up:     arpSequence_ = notes; break;
-            case ArpMode::Down:   arpSequence_ = { notes.rbegin(), notes.rend() }; break;
+        switch (lane.arpMode) {
+            case ArpMode::Up:
+                lane.arpSequence = notes; break;
+            case ArpMode::Down:
+                lane.arpSequence = { notes.rbegin(), notes.rend() }; break;
             case ArpMode::UpDown:
-                arpSequence_ = notes;
+                lane.arpSequence = notes;
                 if (notes.size() > 2)
                     for (int i = (int)notes.size() - 2; i > 0; --i)
-                        arpSequence_.push_back(notes[i]);
+                        lane.arpSequence.push_back(notes[i]);
                 break;
             case ArpMode::Random:
-                arpSequence_ = notes; break;
+                lane.arpSequence = notes; break;
             case ArpMode::AsPlayed:
-                arpSequence_ = heldNotes_; break;
+                lane.arpSequence = lane.heldNotes; break;
+            case ArpMode::Converge: {
+                // Outer→inner: hi, lo, hi-1, lo+1, ...
+                std::vector<int> lo = notes, hi = notes;
+                int l = 0, h = (int)notes.size() - 1;
+                while (l <= h) {
+                    if (h != l) { lane.arpSequence.push_back(notes[h]); lane.arpSequence.push_back(notes[l]); }
+                    else        { lane.arpSequence.push_back(notes[l]); }
+                    ++l; --h;
+                }
+                break;
+            }
+            case ArpMode::Diverge: {
+                // Inner→outer: middle notes first
+                int mid = (int)notes.size() / 2;
+                int lo = mid, hi = mid;
+                while (lo >= 0 || hi < (int)notes.size()) {
+                    if (lo >= 0 && hi < (int)notes.size() && lo != hi) {
+                        lane.arpSequence.push_back(notes[lo--]);
+                        lane.arpSequence.push_back(notes[hi++]);
+                    } else if (lo >= 0) { lane.arpSequence.push_back(notes[lo--]); }
+                    else                { lane.arpSequence.push_back(notes[hi++]); }
+                }
+                break;
+            }
         }
 
-        // Expand across arpOctaves
-        auto base = arpSequence_;
-        for (int o = 1; o < arpOctaves; ++o)
-            for (int n : base)
-                arpSequence_.push_back(n + o * 12);
+        // Expand across octaves
+        auto base = lane.arpSequence;
+        for (int o = 1; o < lane.arpOctaves; ++o)
+            for (int note : base)
+                lane.arpSequence.push_back(note + o * 12);
 
-        if (arpMode == ArpMode::Random)
-            for (int i = (int)arpSequence_.size() - 1; i > 0; --i)
-                std::swap(arpSequence_[i], arpSequence_[rng_.nextInt(i + 1)]);
+        if (lane.arpMode == ArpMode::Random)
+            for (int i = (int)lane.arpSequence.size() - 1; i > 0; --i)
+                std::swap(lane.arpSequence[i], lane.arpSequence[rng_.nextInt(i + 1)]);
 
-        if (arpStep_ >= (int)arpSequence_.size()) arpStep_ = 0;
+        if (lane.arpStep >= (int)lane.arpSequence.size()) lane.arpStep = 0;
     }
 };

@@ -45,7 +45,7 @@ private:
 
     // Layout constants
     static constexpr int kHeaderH   = 44;   // global controls bar
-    static constexpr int kLaneHdrW  = 78;   // lane label column width
+    static constexpr int kLaneHdrW  = 200;  // lane label column width
     static constexpr int kDetailH   = 56;   // step detail panel height
     static constexpr int kStepMinW  = 16;   // minimum step cell width
 
@@ -56,8 +56,10 @@ private:
     // Control widget rects (built in resized)
     juce::Rectangle<int> playBtnR_, stopBtnR_, bpmLabelR_, syncBtnR_;
     juce::Rectangle<int> rootBtnR_, scaleBtnR_, lanesDecR_, lanesIncR_;
-    juce::Rectangle<int> arpBtnR_, arpModeR_;
-    std::array<juce::Rectangle<int>, Sequencer::kMaxLanes> stepsDecR_, stepsIncR_, octDecR_, octIncR_, swingR_, laneActiveR_;
+    juce::Rectangle<int> arpBtnR_, arpModeR_;  // kept for global toolbar remnants
+    std::array<juce::Rectangle<int>, Sequencer::kMaxLanes> stepsDecR_, stepsIncR_,
+        octDecR_, octIncR_, swingR_, laneActiveR_,
+        laneArpBtnR_, laneArpModeR_, laneArpRateR_, laneArpOctR_, laneRndBtnR_;
 
     juce::Rectangle<int> detailR_;
 

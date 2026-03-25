@@ -25,7 +25,8 @@ public:
     void renderBlock(juce::AudioBuffer<float>& buffer, int startSample, int numSamples);
 
     // Parameter setters
-    void setOscEngine(int idx, OscEngineType t);
+    void setOscEngine   (int idx, OscEngineType t);
+    void setOscEngineIdx(int idx, int engineIdx);   // 0-8, see OscEngine namespace
     void setAmpEnvParams(const ADSR::Params& p)    { ampEnv_.setParams(p); }
     void setFilterEnvParams(const ADSR::Params& p) { filterEnv_.setParams(p); }
     void setCutoff(float hz)     { baseCutoff_ = hz; ladderFilter_.setCutoff(hz); svfFilter_.setCutoff(hz); combFilter_.setCutoff(hz); }
@@ -98,6 +99,7 @@ private:
         OscEngineType::Wavetable,
         OscEngineType::Wavetable
     };
+    std::array<int, kNumOscs> oscEngineIdx_ { OscEngine::WT, OscEngine::WT, OscEngine::WT };
     std::array<float, kNumOscs> oscLevels_ { 1.f, 0.f, 0.f };
     std::array<float, kNumOscs> oscTune_   { 0.f, 0.f, 0.f }; // semitones
     std::array<int,   kNumOscs> oscBanks_  { -1, -1, -1 };     // -1 = needs init

@@ -70,6 +70,41 @@ void Voice::setOscEngine(int idx, OscEngineType t) {
     }
 }
 
+void Voice::setOscEngineIdx(int idx, int engineIdx) {
+    if (idx < 0 || idx >= kNumOscs) return;
+    analogOscs_[idx].resetUnison();   // clear any prior supersaw state
+
+    switch (engineIdx) {
+        case OscEngine::WT:
+            setOscEngine(idx, OscEngineType::Wavetable); break;
+        case OscEngine::GR:
+            setOscEngine(idx, OscEngineType::Granular);  break;
+        case OscEngine::Sine:
+            oscTypes_[idx] = OscEngineType::Analog;
+            analogOscs_[idx].setWaveform(OscWaveform::Sine);    break;
+        case OscEngine::Saw:
+            oscTypes_[idx] = OscEngineType::Analog;
+            analogOscs_[idx].setWaveform(OscWaveform::Saw);     break;
+        case OscEngine::SuperSaw:
+            oscTypes_[idx] = OscEngineType::Analog;
+            analogOscs_[idx].setSuperSaw(0.4f);                  break;
+        case OscEngine::Square:
+            oscTypes_[idx] = OscEngineType::Analog;
+            analogOscs_[idx].setWaveform(OscWaveform::Square);  break;
+        case OscEngine::Triangle:
+            oscTypes_[idx] = OscEngineType::Analog;
+            analogOscs_[idx].setWaveform(OscWaveform::Triangle);break;
+        case OscEngine::SawTri:
+            oscTypes_[idx] = OscEngineType::Analog;
+            analogOscs_[idx].setWaveform(OscWaveform::SawTri);  break;
+        case OscEngine::Noise:
+            oscTypes_[idx] = OscEngineType::Analog;
+            analogOscs_[idx].setWaveform(OscWaveform::Noise);   break;
+        default: break;
+    }
+    oscEngineIdx_[idx] = engineIdx;
+}
+
 void Voice::setOscBankIndex(int oscIdx, int bankIdx) {
     if (oscIdx < 0 || oscIdx >= kNumOscs) return;
     if (oscBanks_[oscIdx] == bankIdx)     return;
@@ -129,6 +164,14 @@ void Voice::renderBlock(juce::AudioBuffer<float>& buffer, int startSample, int n
         float levelMod = juce::jlimit(0.f, 1.f, oscLevels_[i] + modLevel_[i]);
         analogOscs_[i].setGain(levelMod);
         wavetableOscs_[i].setGain(levelMod);
+        // Morph re-use for analog modes: SuperSaw=detune, Square=PW
+        if (oscEngineIdx_[i] == OscEngine::SuperSaw) {
+            float detune = juce::jlimit(0.001f, 1.f, baseMorph_[i] + modMorph_[i]);
+            analogOscs_[i].setSuperSaw(detune);
+        } else if (oscEngineIdx_[i] == OscEngine::Square) {
+            float pw = juce::jlimit(0.05f, 0.95f, baseMorph_[i] + modMorph_[i]);
+            analogOscs_[i].setPulseWidth(pw);
+        }
         // FM
         if (std::abs(modFM_[i]) > 0.001f)
             analogOscs_[i].setFMAmount(juce::jlimit(0.f, 1.f, 0.f + modFM_[i]));

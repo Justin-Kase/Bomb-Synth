@@ -2,13 +2,26 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <array>
 
-enum class OscWaveform { Sine, Saw, Square, Triangle, SawTri };
+enum class OscWaveform { Sine, Saw, Square, Triangle, SawTri, Noise };
+
+// Engine indices (stored in osc{n}_engine APVTS param)
+namespace OscEngine {
+    enum { WT=0, GR, Sine, Saw, SuperSaw, Square, Triangle, SawTri, Noise, Count };
+    static constexpr const char* kNames[] = {
+        "WT","GR","SINE","SAW","SPSAW","SQR","TRI","SAWTRI","NOISE"
+    };
+}
 
 class AnalogOscillator {
 public:
     void prepare(double sampleRate);
     void setFrequency(float hz);
     void setWaveform(OscWaveform w)    { waveform_ = w; }
+    void setSuperSaw(float detuneAmt) {    // detuneAmt 0-1 → 0-50 cents spread
+        setWaveform(OscWaveform::Saw);
+        setUnisonVoices(7, detuneAmt * 50.f, 1.0f);
+    }
+    void resetUnison()                { setUnisonVoices(1, 0.f, 0.f); }
     void setPulseWidth(float pw)       { pulseWidth_ = juce::jlimit(0.05f, 0.95f, pw); }
     void setFMAmount(float amt)        { fmAmount_ = amt; }
     void setFMInput(float sample)      { fmInput_ = sample; }

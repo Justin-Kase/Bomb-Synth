@@ -1,4 +1,5 @@
 #pragma once
+#include "engine/oscillators/AnalogOscillator.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <BinaryData.h>
@@ -73,7 +74,7 @@ public:
     int   octaveValue_ = 0;   // -3..+3, kept in sync with APVTS
     juce::Rectangle<int> octDecR_, octIncR_, octDisplayR_;
 
-    BKnob tuneKnob   { "TUNE",    BCol::accent2 };
+    BKnob tuneKnob   { "TUNE",   BCol::accent2 };
     BKnob fineKnob   { "FINE",    BCol::accent2 };
     BKnob levelKnob  { "LEVEL",   BCol::accent2 };
     BKnob fmKnob     { "FM",      BCol::amber   };
@@ -93,7 +94,7 @@ public:
     // Engine mode toggle
     juce::TextButton modeBtn { "WT" };
 
-    std::function<void(bool isGran)> onModeChanged;
+    std::function<void(int engineIdx)> onModeChanged;
     std::function<void(int mode)>    onWarpModeChanged;
 
     explicit OscStrip(int index);
@@ -101,7 +102,8 @@ public:
     void resized() override;
     void paint(juce::Graphics&) override;
 
-    void setGranMode(bool gran);
+    void setEngineIdx(int idx);
+    void setGranMode(bool gran) { setEngineIdx(gran ? OscEngine::GR : OscEngine::WT); }  // compat
     void setWarpModeDisplay(int mode);
 
     // juce::Slider::Listener — updates display morph when knob moves
@@ -110,12 +112,13 @@ public:
 
     std::function<void(int)> onOctaveChanged;  // called with new octave value
 
-    bool granMode() const { return granMode_; }
+    int  engineIdx() const { return engineIdx_; }
+    bool granMode()  const { return engineIdx_ == OscEngine::GR; }
     int  warpModeVal() const { return warpMode_; }
 
 private:
     int  index_;
-    bool granMode_ = false;
+    int engineIdx_ = OscEngine::WT;
     int  warpMode_ = 0;
     static constexpr int kLabelW   = 44;
     static constexpr int kDisplayW = 155;
