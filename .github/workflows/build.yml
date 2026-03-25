@@ -21,10 +21,13 @@ jobs:
         include:
           - name: macOS
             os: macos-latest
+            artifact: BombSynth-macOS.zip
           - name: Windows
             os: windows-latest
+            artifact: BombSynth-Windows.zip
           - name: Linux
             os: ubuntu-latest
+            artifact: BombSynth-Linux.zip
 
     steps:
     - uses: actions/checkout@v4
@@ -33,49 +36,88 @@ jobs:
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y libasound2-dev libjack-jackd2-dev \
-          libcurl4-openssl-dev libfreetype6-dev libx11-dev libxcomposite-dev \
-          libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
+        sudo apt-get install -y \
+          libasound2-dev libjack-jackd2-dev \
+          libcurl4-openssl-dev libfreetype6-dev \
+          libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+          libxinerama-dev libxrandr-dev libxrender-dev \
           libwebkit2gtk-4.1-dev libglu1-mesa-dev mesa-common-dev
 
-    - name: Configure
+    - name: Configure (macOS universal)
+      if: runner.os == 'macOS'
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+
+    - name: Configure (Windows / Linux)
+      if: runner.os != 'macOS'
       run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
     - name: Build
-      run: cmake --build build --config Release
+      run: cmake --build build --config Release --parallel
 
+    - name: Get version
+      id: version
+      shell: bash
+      run: |
+        if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        else
+          echo "tag=dev-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+        fi
+
+    # ── macOS ──────────────────────────────────────────────────────────────────
     - name: Package (macOS)
       if: runner.os == 'macOS'
       run: |
-        cd "build/Source/BombSynth_artefacts/Release/VST3"
-        zip -r BombSynth-macOS.zip "Bomb Synth.vst3"
-        mv BombSynth-macOS.zip ../../../../../
+        VERSION="${{ steps.version.outputs.tag }}"
+        STAGEDIR="/tmp/BombSynth-stage"
+        mkdir -p "$STAGEDIR"
+        cp README.md "$STAGEDIR/"
+        ditto "build/Source/BombSynth_artefacts/Release/VST3/Bomb Synth.vst3" \
+              "$STAGEDIR/Bomb Synth.vst3"
+        if [ -d "build/Source/BombSynth_artefacts/Release/AU/Bomb Synth.component" ]; then
+          ditto "build/Source/BombSynth_artefacts/Release/AU/Bomb Synth.component" \
+                "$STAGEDIR/Bomb Synth.component"
+        fi
+        cd /tmp
+        ditto -c -k --sequesterRsrc BombSynth-stage "BombSynth-${VERSION}-macOS.zip"
+        mv "BombSynth-${VERSION}-macOS.zip" "$GITHUB_WORKSPACE/BombSynth-macOS.zip"
 
+    # ── Windows ────────────────────────────────────────────────────────────────
     - name: Package (Windows)
       if: runner.os == 'Windows'
-      shell: cmd
+      shell: pwsh
       run: |
-        cd "build\Source\BombSynth_artefacts\Release\VST3"
-        7z a BombSynth-Windows.zip "Bomb Synth.vst3"
-        move BombSynth-Windows.zip ..\..\..\..\..\
+        $version = "${{ steps.version.outputs.tag }}"
+        $stage   = "stage"
+        New-Item -ItemType Directory -Force -Path $stage | Out-Null
+        Copy-Item README.md $stage\
+        $vst3 = "build\Source\BombSynth_artefacts\Release\VST3\Bomb Synth.vst3"
+        Copy-Item -Recurse $vst3 "$stage\Bomb Synth.vst3"
+        Compress-Archive -Path "$stage\*" -DestinationPath "BombSynth-Windows.zip" -Force
 
+    # ── Linux ──────────────────────────────────────────────────────────────────
     - name: Package (Linux)
       if: runner.os == 'Linux'
       run: |
-        cd "build/Source/BombSynth_artefacts/Release/VST3"
-        zip -r BombSynth-Linux.zip "Bomb Synth.vst3"
-        mv BombSynth-Linux.zip ../../../../../
+        VERSION="${{ steps.version.outputs.tag }}"
+        mkdir -p stage
+        cp README.md stage/
+        cp -r "build/Source/BombSynth_artefacts/Release/VST3/Bomb Synth.vst3" stage/
+        cd stage && zip -r "../BombSynth-Linux.zip" . && cd ..
 
+    # ── Upload artifact (all runs) ─────────────────────────────────────────────
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: BombSynth-${{ matrix.name }}
-        path: BombSynth-*.zip
+        path: ${{ matrix.artifact }}
 
-    - name: Create Release
+    # ── Attach to GitHub Release (tag pushes only) ────────────────────────────
+    - name: Attach to release
       if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
-        files: BombSynth-*.zip
+        files: ${{ matrix.artifact }}
+        fail_on_unmatched_files: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
