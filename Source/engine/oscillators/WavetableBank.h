@@ -7,9 +7,9 @@
 #include <cstdint>
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-static constexpr int kWTSize   = 2048;
-static constexpr int kWTFrames = 8;
-static constexpr int kWTBanks  = 6;
+static constexpr int kWTSize    = 2048;
+static constexpr int kWTFrames  = 8;    // built-in banks (legacy constant, kept for compat)
+static constexpr int kWTBanks   = 6;    // built-in synthesized banks
 
 // ── Spectral warp modes ────────────────────────────────────────────────────────
 enum class WarpMode { None=0, PhaseBend, Smear, Mirror };
@@ -34,12 +34,16 @@ struct WavetableBank {
     uint32_t      colourArgb { 0xFF4FC3F7 };   // ARGB — avoids juce_graphics dep
     bool          isUser     { false };
     juce::String  filePath;                     // set for user-loaded banks
-    std::array<WavetableFrame, kWTFrames> frames;
+    std::vector<WavetableFrame> frames;         // variable frame count per bank
+
+    int numFrames() const noexcept { return (int)frames.size(); }
 
     inline float getSample(float phase01, float morph01) const noexcept {
-        float fpos = juce::jlimit(0.f, (float)(kWTFrames - 1), morph01 * (kWTFrames - 1));
+        const int nf = (int)frames.size();
+        if (nf == 0) return 0.f;
+        float fpos = juce::jlimit(0.f, (float)(nf - 1), morph01 * (float)(nf - 1));
         int   f0   = (int)fpos;
-        int   f1   = juce::jmin(f0 + 1, kWTFrames - 1);
+        int   f1   = juce::jmin(f0 + 1, nf - 1);
         float t    = fpos - f0;
         return frames[f0].getSample(phase01) * (1.f - t)
              + frames[f1].getSample(phase01) * t;
@@ -81,11 +85,11 @@ public:
         b.isUser     = true;
         b.filePath   = filePath;
 
+        b.frames.resize(kWTFrames);
         for (int fr = 0; fr < kWTFrames; ++fr) {
             // Determine source segment for this frame
             int startSmp, segLen;
             if (totalSamples <= kWTSize) {
-                // Single-cycle: use the whole buffer for every frame
                 startSmp = 0;
                 segLen   = totalSamples;
             } else {
@@ -112,6 +116,7 @@ public:
     }
 
 private:
+    void loadESWBanks();  // scans wavetables folder at runtime
     std::vector<WavetableBank> banks_;
     juce::CriticalSection     addLock_;  // guards addUserBank only
 
@@ -150,6 +155,7 @@ private:
     // ── ANALOG  ────────────────────────────────────────────────────────────────
     static WavetableBank makeAnalog() {
         WavetableBank b;
+        b.frames.resize(kWTFrames);
         b.name   = "ANALOG";
         b.colourArgb = 0xFF4FC3F7u;
 
@@ -191,6 +197,7 @@ private:
     // ── DIGITAL ────────────────────────────────────────────────────────────────
     static WavetableBank makeDigital() {
         WavetableBank b;
+        b.frames.resize(kWTFrames);
         b.name   = "DIGITAL";
         b.colourArgb = 0xFFCE93D8u;
 
@@ -236,6 +243,7 @@ private:
     // ── VOCAL ──────────────────────────────────────────────────────────────────
     static WavetableBank makeVocal() {
         WavetableBank b;
+        b.frames.resize(kWTFrames);
         b.name   = "VOCAL";
         b.colourArgb = 0xFFFFD740u;
 
@@ -269,6 +277,7 @@ private:
     // ── BRASS ──────────────────────────────────────────────────────────────────
     static WavetableBank makeBrass() {
         WavetableBank b;
+        b.frames.resize(kWTFrames);
         b.name   = "BRASS";
         b.colourArgb = 0xFFFF9800u;
 
@@ -290,6 +299,7 @@ private:
     // ── PLUCK ──────────────────────────────────────────────────────────────────
     static WavetableBank makePluck() {
         WavetableBank b;
+        b.frames.resize(kWTFrames);
         b.name   = "PLUCK";
         b.colourArgb = 0xFF00E676u;
 
@@ -306,6 +316,7 @@ private:
     // ── ORGAN ──────────────────────────────────────────────────────────────────
     static WavetableBank makeOrgan() {
         WavetableBank b;
+        b.frames.resize(kWTFrames);
         b.name   = "ORGAN";
         b.colourArgb = 0xFFFF80ABu;
 
@@ -343,13 +354,14 @@ private:
 
     // ── Constructor ────────────────────────────────────────────────────────────
     WavetableBankLibrary() {
-        banks_.reserve(32);  // pre-allocate — prevents reallocation when user banks are added
+        banks_.reserve(64);  // expanded for ESW banks + user banks
         banks_.push_back(makeAnalog());
         banks_.push_back(makeDigital());
         banks_.push_back(makeVocal());
         banks_.push_back(makeBrass());
         banks_.push_back(makePluck());
         banks_.push_back(makeOrgan());
+        loadESWBanks();
     }
 
     JUCE_DECLARE_NON_COPYABLE(WavetableBankLibrary)

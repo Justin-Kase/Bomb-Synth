@@ -16,7 +16,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout BombSynthAudioProcessor::cre
     // ── Oscillators ──────────────────────────────────────────────────────────
     for (int i = 1; i <= 3; ++i) {
         String n(i);
-        p.push_back(std::make_unique<AudioParameterInt>  ("osc"+n+"_wave",  "OSC "+n+" Bank",  0, 31, 0));
+        p.push_back(std::make_unique<AudioParameterInt>  ("osc"+n+"_wave",  "OSC "+n+" Bank",  0, 63, 0));
         p.push_back(std::make_unique<AudioParameterFloat>("osc"+n+"_morph", "OSC "+n+" Morph",
             NormalisableRange<float>{0.f, 1.f}, 0.f));
         p.push_back(std::make_unique<juce::AudioParameterInt>  ("osc"+n+"_oct",   "OSC "+n+" Octave", -3, 3, 0));
