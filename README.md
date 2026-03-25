@@ -10,13 +10,15 @@ VST3 + AU · macOS Universal (arm64 / x86_64) · C++17 · JUCE 8
 
 | Platform | Link |
 |----------|------|
-| macOS Universal (VST3 + AU) | [BombSynth-v0.7.0-macOS.zip](https://github.com/Justin-Kase/Bomb-Synth/releases/latest/download/BombSynth-v0.7.0-macOS.zip) |
-| Windows / Linux | Build from source (see below) |
+| macOS Universal arm64 + x86_64 (VST3 + AU) | [BombSynth-macOS.zip](https://github.com/Justin-Kase/Bomb-Synth/releases/latest/download/BombSynth-macOS.zip) |
+| Windows x64 (VST3) | [BombSynth-Windows.zip](https://github.com/Justin-Kase/Bomb-Synth/releases/latest/download/BombSynth-Windows.zip) |
+| Linux x64 (VST3) | [BombSynth-Linux.zip](https://github.com/Justin-Kase/Bomb-Synth/releases/latest/download/BombSynth-Linux.zip) |
 
-**macOS installation:**
-1. Extract the zip
-2. Copy `Bomb Synth.vst3` → `/Library/Audio/Plug-Ins/VST3/`
-3. *(Optional)* Copy `Bomb Synth.component` → `/Library/Audio/Plug-Ins/Components/` (AU)
+**macOS:** Extract → copy `Bomb Synth.vst3` → `/Library/Audio/Plug-Ins/VST3/` · *(AU)* copy `Bomb Synth.component` → `/Library/Audio/Plug-Ins/Components/`
+
+**Windows:** Extract → copy `Bomb Synth.vst3` → `C:\Program Files\Common Files\VST3\`
+
+**Linux:** Extract → copy `Bomb Synth.vst3` → `~/.vst3/` or `/usr/lib/vst3/`
 
 ---
 
