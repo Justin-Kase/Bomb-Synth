@@ -41,6 +41,16 @@ public:
     void setOscLevel     (int oscIdx, float level);
     void setOscTune      (int oscIdx, float semitones);  // coarse detune
 
+    // Granular params
+    void setGranularDensity  (int osc, float v) { if (osc>=0&&osc<kNumOscs) granParams_[osc].density   = v; }
+    void setGranularSize     (int osc, float v) { if (osc>=0&&osc<kNumOscs) granParams_[osc].size      = v; }
+    void setGranularSpray    (int osc, float v) { if (osc>=0&&osc<kNumOscs) granParams_[osc].spray     = v; }
+    void setGranularPitchScat(int osc, float v) { if (osc>=0&&osc<kNumOscs) granParams_[osc].pitchScat = v; }
+
+    // Warp params (forwarded to WavetableOscillator)
+    void setOscWarpMode  (int osc, int mode)  { if (osc>=0&&osc<kNumOscs) wavetableOscs_[osc].setWarpMode  (static_cast<WarpMode>(mode)); }
+    void setOscWarpAmount(int osc, float amt) { if (osc>=0&&osc<kNumOscs) wavetableOscs_[osc].setWarpAmount(amt); }
+
     // Modulation inputs (applied each renderBlock)
     void setModPitch(float semitones) { modPitch_ = semitones; }
     void setModMorph(int osc, float delta) {
@@ -82,6 +92,9 @@ private:
 
     AnalogOscillator    analogOscs_[kNumOscs];
     WavetableOscillator wavetableOscs_[kNumOscs];
+    GranularEngine      granularOscs_[kNumOscs];
+    struct GranParams { float density=20, size=80, spray=0.1f, pitchScat=0; };
+    std::array<GranParams, kNumOscs> granParams_;
 
     LadderFilter  ladderFilter_;
     SVFFilter     svfFilter_;

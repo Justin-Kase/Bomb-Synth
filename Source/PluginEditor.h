@@ -66,26 +66,54 @@ private:
 class OscStrip : public juce::Component, public juce::Slider::Listener {
 public:
     WavetableDisplay display;
-    BKnob morphKnob  { "MORPH",  BCol::accent2 };
-    BKnob tuneKnob   { "TUNE",   BCol::accent2 };
-    BKnob fineKnob   { "FINE",   BCol::accent2 };
-    BKnob levelKnob  { "LEVEL",  BCol::accent2 };
-    BKnob fmKnob     { "FM",     BCol::amber   };
-    BKnob unisonKnob { "UNISON", BCol::textDim };
-    BKnob detuneKnob { "DETUNE", BCol::textDim };
+
+    // WT knobs
+    BKnob morphKnob  { "MORPH",   BCol::accent2 };
+    BKnob tuneKnob   { "TUNE",    BCol::accent2 };
+    BKnob fineKnob   { "FINE",    BCol::accent2 };
+    BKnob levelKnob  { "LEVEL",   BCol::accent2 };
+    BKnob fmKnob     { "FM",      BCol::amber   };
+    BKnob unisonKnob { "UNISON",  BCol::textDim };
+    BKnob detuneKnob { "DETUNE",  BCol::textDim };
+
+    // Granular knobs (visible in GR mode)
+    BKnob densityKnob { "DENSITY", BCol::green };
+    BKnob sizeKnob    { "SIZE",    BCol::green };
+    BKnob sprayKnob   { "SPRAY",   BCol::green };
+    BKnob pitchScKnob { "PITCH",   BCol::green };
+
+    // Warp controls (always visible)
+    juce::TextButton warpModeBtn { "WARP" };
+    BKnob warpAmtKnob { "AMT", BCol::accent };
+
+    // Engine mode toggle
+    juce::TextButton modeBtn { "WT" };
+
+    std::function<void(bool isGran)> onModeChanged;
+    std::function<void(int mode)>    onWarpModeChanged;
 
     explicit OscStrip(int index);
     ~OscStrip() override;
     void resized() override;
     void paint(juce::Graphics&) override;
 
+    void setGranMode(bool gran);
+    void setWarpModeDisplay(int mode);
+
     // juce::Slider::Listener — updates display morph when knob moves
     void sliderValueChanged(juce::Slider* s) override;
 
+    bool granMode() const { return granMode_; }
+    int  warpModeVal() const { return warpMode_; }
+
 private:
-    int index_;
-    static constexpr int kLabelW   = 38;
+    int  index_;
+    bool granMode_ = false;
+    int  warpMode_ = 0;
+    static constexpr int kLabelW   = 44;
     static constexpr int kDisplayW = 155;
+    static constexpr int kWarpBtnW = 34;
+    static constexpr int kWarpKnobW= 52;
 };
 
 // ─── Main Editor ─────────────────────────────────────────────────────────────
@@ -223,6 +251,9 @@ private:
     // OSC knob attachments (no waveBox attachment — display handles bank)
     std::array<std::unique_ptr<SA>, 3> oscMorphAtt_, oscTuneAtt_, oscFineAtt_,
                                         oscLevelAtt_, oscFmAtt_, oscUniAtt_, oscDetuneAtt_;
+    // Granular + warp attachments
+    std::array<std::unique_ptr<SA>, 3> oscGranDensAtt_, oscGranSizeAtt_,
+                                        oscGranSprayAtt_, oscGranPitchAtt_, oscWarpAmtAtt_;
     // Filter
     std::unique_ptr<SA> cutoffAtt_, resAtt_, driveAtt_, envAmtAtt_;
     std::unique_ptr<IA> filterTypeAtt_;

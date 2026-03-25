@@ -123,12 +123,65 @@ OscStrip::OscStrip(int idx) : index_(idx) {
     for (auto* k : { &morphKnob, &tuneKnob, &fineKnob, &levelKnob,
                       &fmKnob, &unisonKnob, &detuneKnob })
         addAndMakeVisible(k);
+    for (auto* k : { &densityKnob, &sizeKnob, &sprayKnob, &pitchScKnob }) {
+        addAndMakeVisible(k);
+        k->setVisible(false);
+    }
+    addAndMakeVisible(warpAmtKnob);
+
+    // Mode button [WT|GR]
+    modeBtn.setColour(juce::TextButton::buttonColourId,   BCol::knobBg);
+    modeBtn.setColour(juce::TextButton::buttonOnColourId, BCol::green.withAlpha(0.3f));
+    modeBtn.setColour(juce::TextButton::textColourOffId,  BCol::textDim);
+    modeBtn.setColour(juce::TextButton::textColourOnId,   BCol::green);
+    modeBtn.setClickingTogglesState(false);
+    modeBtn.onClick = [this] {
+        setGranMode(!granMode_);
+        if (onModeChanged) onModeChanged(granMode_);
+    };
+    addAndMakeVisible(modeBtn);
+
+    // Warp mode cycle button
+    warpModeBtn.setColour(juce::TextButton::buttonColourId,  BCol::knobBg);
+    warpModeBtn.setColour(juce::TextButton::textColourOffId, BCol::textDim);
+    warpModeBtn.onClick = [this] {
+        warpMode_ = (warpMode_ + 1) % 4;
+        static const char* labels[] = { "WARP", "PB", "SM", "MR" };
+        warpModeBtn.setButtonText(labels[warpMode_]);
+        warpModeBtn.setColour(juce::TextButton::textColourOffId,
+                              warpMode_ == 0 ? BCol::textDim : juce::Colour(0xFFFF9800u));
+        display.setWarpMode(warpMode_);
+        if (onWarpModeChanged) onWarpModeChanged(warpMode_);
+    };
+    addAndMakeVisible(warpModeBtn);
 
     morphKnob.slider.addListener(this);
 }
 
 OscStrip::~OscStrip() {
     morphKnob.slider.removeListener(this);
+}
+
+void OscStrip::setGranMode(bool gran) {
+    granMode_ = gran;
+    modeBtn.setButtonText(gran ? "GR" : "WT");
+    modeBtn.setToggleState(gran, juce::dontSendNotification);
+    morphKnob.label.setText(gran ? "POS" : "MORPH", juce::dontSendNotification);
+
+    for (auto* k : { &tuneKnob, &fineKnob, &fmKnob, &unisonKnob, &detuneKnob })
+        k->setVisible(!gran);
+    for (auto* k : { &densityKnob, &sizeKnob, &sprayKnob, &pitchScKnob })
+        k->setVisible(gran);
+    resized();
+}
+
+void OscStrip::setWarpModeDisplay(int mode) {
+    warpMode_ = mode;
+    static const char* labels[] = { "WARP", "PB", "SM", "MR" };
+    warpModeBtn.setButtonText(labels[mode]);
+    warpModeBtn.setColour(juce::TextButton::textColourOffId,
+                          mode == 0 ? BCol::textDim : juce::Colour(0xFFFF9800u));
+    display.setWarpMode(mode);
 }
 
 void OscStrip::sliderValueChanged(juce::Slider* s) {
@@ -140,8 +193,9 @@ void OscStrip::paint(juce::Graphics& g) {
     const int H = getHeight();
     const juce::Colour labelCol = BCol::accent2;
 
-    // OSC badge — pill background
-    juce::Rectangle<float> badge(3.f, H * 0.25f, kLabelW - 6.f, H * 0.5f);
+    // OSC badge — pill background (top 60% of label area)
+    const int badgeH = (int)(H * 0.55f);
+    juce::Rectangle<float> badge(2.f, 2.f, (float)kLabelW - 4.f, (float)badgeH - 4.f);
     g.setColour(labelCol.withAlpha(0.12f));
     g.fillRoundedRectangle(badge, 4.f);
     g.setColour(labelCol.withAlpha(0.4f));
@@ -167,21 +221,42 @@ void OscStrip::paint(juce::Graphics& g) {
 
 void OscStrip::resized() {
     auto b = getLocalBounds().reduced(0, 2);
+    const int H = b.getHeight();
 
-    // OSC label occupies the left
-    b.removeFromLeft(kLabelW);
+    // OSC label + mode button on left
+    auto labelArea = b.removeFromLeft(kLabelW);
+    const int badgeH = (int)(H * 0.55f);
+    modeBtn.setBounds(labelArea.removeFromBottom(H - badgeH - 2).reduced(1, 1));
 
     // Wavetable display
     display.setBounds(b.removeFromLeft(kDisplayW));
-    b.removeFromLeft(6);
+    b.removeFromLeft(4);
 
-    // 7 knobs share the remaining width equally
-    BKnob* knobs[] = { &morphKnob, &tuneKnob, &fineKnob,
-                        &levelKnob, &fmKnob, &unisonKnob, &detuneKnob };
-    const int kw = (b.getWidth() - 6 * 4) / 7;
-    for (auto* k : knobs) {
-        k->setBounds(b.removeFromLeft(kw));
-        b.removeFromLeft(4);
+    // Warp controls: [WARP MODE btn] [AMT knob]
+    warpModeBtn.setBounds(b.removeFromLeft(kWarpBtnW).reduced(0, H / 4));
+    b.removeFromLeft(2);
+    warpAmtKnob.setBounds(b.removeFromLeft(kWarpKnobW));
+    b.removeFromLeft(4);
+
+    // Remaining knob slots
+    if (!granMode_) {
+        BKnob* knobs[] = { &morphKnob, &tuneKnob, &fineKnob,
+                            &levelKnob, &fmKnob, &unisonKnob, &detuneKnob };
+        const int nk = 7;
+        const int kw = (b.getWidth() - (nk - 1) * 4) / nk;
+        for (auto* k : knobs) {
+            k->setBounds(b.removeFromLeft(kw));
+            b.removeFromLeft(4);
+        }
+    } else {
+        BKnob* knobs[] = { &morphKnob, &densityKnob, &sizeKnob,
+                            &sprayKnob, &pitchScKnob, &levelKnob };
+        const int nk = 6;
+        const int kw = (b.getWidth() - (nk - 1) * 4) / nk;
+        for (auto* k : knobs) {
+            k->setBounds(b.removeFromLeft(kw));
+            b.removeFromLeft(4);
+        }
     }
 }
 
@@ -205,27 +280,64 @@ BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProce
     addAndMakeVisible(oscSection_);
 
     // ── OSC attachments + display callbacks ──────────────────────────────────
-    static const char* morphIds[3]  = {"osc1_morph","osc2_morph","osc3_morph"};
-    static const char* tuneIds[3]   = {"osc1_tune", "osc2_tune", "osc3_tune" };
-    static const char* fineIds[3]   = {"osc1_fine", "osc2_fine", "osc3_fine" };
-    static const char* levelIds[3]  = {"osc1_level","osc2_level","osc3_level"};
-    static const char* fmIds[3]     = {"osc1_fm",   "osc2_fm",   "osc3_fm"  };
-    static const char* uniIds[3]    = {"osc1_uni",  "osc2_uni",  "osc3_uni" };
-    static const char* detIds[3]    = {"osc1_detune","osc2_detune","osc3_detune"};
-    static const char* bankIds[3]   = {"osc1_wave", "osc2_wave", "osc3_wave"};
+    static const char* morphIds[3]   = {"osc1_morph","osc2_morph","osc3_morph"};
+    static const char* tuneIds[3]    = {"osc1_tune", "osc2_tune", "osc3_tune" };
+    static const char* fineIds[3]    = {"osc1_fine", "osc2_fine", "osc3_fine" };
+    static const char* levelIds[3]   = {"osc1_level","osc2_level","osc3_level"};
+    static const char* fmIds[3]      = {"osc1_fm",   "osc2_fm",   "osc3_fm"  };
+    static const char* uniIds[3]     = {"osc1_uni",  "osc2_uni",  "osc3_uni" };
+    static const char* detIds[3]     = {"osc1_detune","osc2_detune","osc3_detune"};
+    static const char* bankIds[3]    = {"osc1_wave", "osc2_wave", "osc3_wave"};
+    static const char* engineIds[3]  = {"osc1_engine","osc2_engine","osc3_engine"};
+    static const char* granDenIds[3] = {"osc1_gran_density","osc2_gran_density","osc3_gran_density"};
+    static const char* granSzIds[3]  = {"osc1_gran_size","osc2_gran_size","osc3_gran_size"};
+    static const char* granSpIds[3]  = {"osc1_gran_spray","osc2_gran_spray","osc3_gran_spray"};
+    static const char* granPiIds[3]  = {"osc1_gran_pitch","osc2_gran_pitch","osc3_gran_pitch"};
+    static const char* warpAmtIds[3] = {"osc1_warp_amt","osc2_warp_amt","osc3_warp_amt"};
+    static const char* warpMdIds[3]  = {"osc1_warp_mode","osc2_warp_mode","osc3_warp_mode"};
 
     for (int i = 0; i < 3; ++i) {
-        oscMorphAtt_ [i] = std::make_unique<SA>(par, morphIds[i], oscs_[i].morphKnob.slider);
-        oscTuneAtt_  [i] = std::make_unique<SA>(par, tuneIds[i],  oscs_[i].tuneKnob.slider);
-        oscFineAtt_  [i] = std::make_unique<SA>(par, fineIds[i],  oscs_[i].fineKnob.slider);
-        oscLevelAtt_ [i] = std::make_unique<SA>(par, levelIds[i], oscs_[i].levelKnob.slider);
-        oscFmAtt_    [i] = std::make_unique<SA>(par, fmIds[i],    oscs_[i].fmKnob.slider);
-        oscUniAtt_   [i] = std::make_unique<SA>(par, uniIds[i],   oscs_[i].unisonKnob.slider);
-        oscDetuneAtt_[i] = std::make_unique<SA>(par, detIds[i],   oscs_[i].detuneKnob.slider);
+        oscMorphAtt_   [i] = std::make_unique<SA>(par, morphIds[i],  oscs_[i].morphKnob.slider);
+        oscTuneAtt_    [i] = std::make_unique<SA>(par, tuneIds[i],   oscs_[i].tuneKnob.slider);
+        oscFineAtt_    [i] = std::make_unique<SA>(par, fineIds[i],   oscs_[i].fineKnob.slider);
+        oscLevelAtt_   [i] = std::make_unique<SA>(par, levelIds[i],  oscs_[i].levelKnob.slider);
+        oscFmAtt_      [i] = std::make_unique<SA>(par, fmIds[i],     oscs_[i].fmKnob.slider);
+        oscUniAtt_     [i] = std::make_unique<SA>(par, uniIds[i],    oscs_[i].unisonKnob.slider);
+        oscDetuneAtt_  [i] = std::make_unique<SA>(par, detIds[i],    oscs_[i].detuneKnob.slider);
+        oscGranDensAtt_[i] = std::make_unique<SA>(par, granDenIds[i],oscs_[i].densityKnob.slider);
+        oscGranSizeAtt_[i] = std::make_unique<SA>(par, granSzIds[i], oscs_[i].sizeKnob.slider);
+        oscGranSprayAtt_[i]= std::make_unique<SA>(par, granSpIds[i], oscs_[i].sprayKnob.slider);
+        oscGranPitchAtt_[i]= std::make_unique<SA>(par, granPiIds[i], oscs_[i].pitchScKnob.slider);
+        oscWarpAmtAtt_  [i]= std::make_unique<SA>(par, warpAmtIds[i],oscs_[i].warpAmtKnob.slider);
+
+        // Restore engine mode from stored param
+        bool isGran = ((int)par.getRawParameterValue(engineIds[i])->load() != 0);
+        if (isGran) oscs_[i].setGranMode(true);
+
+        // Restore warp mode display from stored param
+        int storedWarpMode = (int)par.getRawParameterValue(warpMdIds[i])->load();
+        if (storedWarpMode != 0) oscs_[i].setWarpModeDisplay(storedWarpMode);
+
+        // Mode button → APVTS engine param
+        const juce::String engParamId = engineIds[i];
+        oscs_[i].onModeChanged = [this, engParamId](bool gran) {
+            if (auto* param = proc_.parameters().getParameter(engParamId))
+                param->setValueNotifyingHost(gran ? 1.f : 0.f);
+        };
+
+        // Warp mode button → APVTS warp_mode param
+        const juce::String warpParamId = warpMdIds[i];
+        oscs_[i].onWarpModeChanged = [this, warpParamId](int mode) {
+            if (auto* param = proc_.parameters().getParameter(warpParamId)) {
+                auto* rp = dynamic_cast<juce::RangedAudioParameter*>(param);
+                if (rp) param->setValueNotifyingHost(rp->getNormalisableRange().convertTo0to1((float)mode));
+            }
+        };
 
         // Initialise display bank from stored param
         int storedBank = (int)par.getRawParameterValue(bankIds[i])->load();
         oscs_[i].display.setBankIndex(storedBank);
+        oscs_[i].display.setWarpMode(storedWarpMode);
 
         // Wire display navigation → APVTS
         const juce::String bankParamId = bankIds[i];
@@ -394,7 +506,9 @@ BombSynthAudioProcessorEditor::~BombSynthAudioProcessorEditor() {
 
 // ─── Tab helpers ─────────────────────────────────────────────────────────────
 void BombSynthAudioProcessorEditor::setSynthVisible(bool v) {
-    for (auto& osc : oscs_)          osc.setVisible(v);
+    for (auto& osc : oscs_) {
+        osc.setVisible(v);
+    }
     oscSection_.setVisible(v);
     filterSection_.setVisible(v);
     for (auto* k : { &cutoffKnob_, &resKnob_, &driveKnob_, &envAmtKnob_ }) k->setVisible(v);
@@ -454,6 +568,18 @@ void BombSynthAudioProcessorEditor::timerCallback() {
     fEnvDisplay_.setADSR  (norm(getF("fenv_attack")), norm(getF("fenv_decay")),
                             getF("fenv_sustain"),      norm(getF("fenv_release")));
     filterDisplay_.setParams(getI("filter_type"), getF("filter_cutoff"), getF("filter_res"));
+
+    // Sync warp mode display + engine mode from params (handles preset changes)
+    static const char* warpMdIds[3]  = {"osc1_warp_mode","osc2_warp_mode","osc3_warp_mode"};
+    static const char* warpAmtIds[3] = {"osc1_warp_amt","osc2_warp_amt","osc3_warp_amt"};
+    static const char* engineIds[3]  = {"osc1_engine","osc2_engine","osc3_engine"};
+    for (int i = 0; i < 3; ++i) {
+        int wm = getI(warpMdIds[i]);
+        if (wm != oscs_[i].warpModeVal())   oscs_[i].setWarpModeDisplay(wm);
+        oscs_[i].display.setWarpAmt(getF(warpAmtIds[i]));
+        bool gran = (getI(engineIds[i]) != 0);
+        if (gran != oscs_[i].granMode())    oscs_[i].setGranMode(gran);
+    }
 }
 
 // ─── Preset browser helpers ───────────────────────────────────────────────────
@@ -605,7 +731,7 @@ void BombSynthAudioProcessorEditor::paint(juce::Graphics& g) {
 
     g.setFont(juce::Font(10.f));
     g.setColour(BCol::textDim);
-    g.drawText("v0.5.0  |  Illbomb", getWidth() - 200, 0, 140, hH,
+    g.drawText("v0.6.0  |  Illbomb", getWidth() - 200, 0, 140, hH,
                juce::Justification::centredRight);
 }
 

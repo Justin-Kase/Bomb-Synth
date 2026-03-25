@@ -30,6 +30,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout BombSynthAudioProcessor::cre
         p.push_back(std::make_unique<AudioParameterInt>  ("osc"+n+"_uni",   "OSC "+n+" Unison", 1, 8, 1));
         p.push_back(std::make_unique<AudioParameterFloat>("osc"+n+"_detune","OSC "+n+" Detune",
             NormalisableRange<float>{0.f, 1.f}, 0.f));
+        // Engine type (0=Wavetable, 1=Granular)
+        p.push_back(std::make_unique<AudioParameterInt>  ("osc"+n+"_engine", "OSC"+n+" Engine", 0, 1, 0));
+        // Granular
+        p.push_back(std::make_unique<AudioParameterFloat>("osc"+n+"_gran_density", "OSC"+n+" Density",
+            NormalisableRange<float>{1.f, 100.f, 0.f, 0.5f}, 20.f));
+        p.push_back(std::make_unique<AudioParameterFloat>("osc"+n+"_gran_size", "OSC"+n+" Grain Size",
+            NormalisableRange<float>{5.f, 500.f, 0.f, 0.5f}, 80.f));
+        p.push_back(std::make_unique<AudioParameterFloat>("osc"+n+"_gran_spray", "OSC"+n+" Spray",
+            NormalisableRange<float>{0.f, 1.f}, 0.1f));
+        p.push_back(std::make_unique<AudioParameterFloat>("osc"+n+"_gran_pitch", "OSC"+n+" Pitch Scatter",
+            NormalisableRange<float>{0.f, 24.f}, 0.f));
+        // Warp
+        p.push_back(std::make_unique<AudioParameterInt>  ("osc"+n+"_warp_mode", "OSC"+n+" Warp Mode", 0, 3, 0));
+        p.push_back(std::make_unique<AudioParameterFloat>("osc"+n+"_warp_amt",  "OSC"+n+" Warp Amount",
+            NormalisableRange<float>{0.f, 1.f}, 0.f));
     }
 
     // ── Filter ───────────────────────────────────────────────────────────────
@@ -184,11 +199,27 @@ void BombSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::
     static const char* levelIds[3] = {"osc1_level","osc2_level","osc3_level"};
     static const char* tuneIds[3]  = {"osc1_tune","osc2_tune","osc3_tune"};
 
+    static const char* engineIds[3]   = {"osc1_engine",     "osc2_engine",     "osc3_engine"};
+    static const char* granDensIds[3] = {"osc1_gran_density","osc2_gran_density","osc3_gran_density"};
+    static const char* granSizeIds[3] = {"osc1_gran_size",   "osc2_gran_size",   "osc3_gran_size"};
+    static const char* granSprayIds[3]= {"osc1_gran_spray",  "osc2_gran_spray",  "osc3_gran_spray"};
+    static const char* granPitchIds[3]= {"osc1_gran_pitch",  "osc2_gran_pitch",  "osc3_gran_pitch"};
+    static const char* warpModeIds[3] = {"osc1_warp_mode",   "osc2_warp_mode",   "osc3_warp_mode"};
+    static const char* warpAmtIds[3]  = {"osc1_warp_amt",    "osc2_warp_amt",    "osc3_warp_amt"};
+
     for (int i = 0; i < 3; ++i) {
         engine_.setOscBankIndex(i, geti(bankIds[i]));
         engine_.setOscMorphPos (i, get (morphIds[i]));
         engine_.setOscLevel    (i, get (levelIds[i]));
         engine_.setOscTune     (i, get (tuneIds[i]));
+        auto eng = (geti(engineIds[i]) == 0) ? OscEngineType::Wavetable : OscEngineType::Granular;
+        engine_.setOscEngine        (i, eng);
+        engine_.setGranularDensity  (i, get (granDensIds[i]));
+        engine_.setGranularSize     (i, get (granSizeIds[i]));
+        engine_.setGranularSpray    (i, get (granSprayIds[i]));
+        engine_.setGranularPitchScat(i, get (granPitchIds[i]));
+        engine_.setOscWarpMode      (i, geti(warpModeIds[i]));
+        engine_.setOscWarpAmount    (i, get (warpAmtIds[i]));
     }
 
     // ── Filter ───────────────────────────────────────────────────────────────

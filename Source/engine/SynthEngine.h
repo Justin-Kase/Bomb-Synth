@@ -19,11 +19,24 @@ public:
     void setMasterGain(float g) { masterGain_ = g; }
     void setFilterType(int t);
 
+    // Oscillator engine type
+    void setOscEngine(int oscIdx, OscEngineType t);
+
     // Wavetable control — forwarded to all voices
     void setOscBankIndex(int oscIdx, int bankIdx);
     void setOscMorphPos (int oscIdx, float morph01);
     void setOscLevel    (int oscIdx, float level);
     void setOscTune     (int oscIdx, float semitones);
+
+    // Granular control
+    void setGranularDensity  (int osc, float v);
+    void setGranularSize     (int osc, float v);
+    void setGranularSpray    (int osc, float v);
+    void setGranularPitchScat(int osc, float v);
+
+    // Warp control
+    void setOscWarpMode  (int osc, int  mode);
+    void setOscWarpAmount(int osc, float amt);
 
     // Modulation pass-through — applied each processBlock
     void setModCutoffHz     (float hz)  { modCutoffHz_        = hz; }

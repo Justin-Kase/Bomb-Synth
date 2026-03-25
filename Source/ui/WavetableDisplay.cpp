@@ -19,17 +19,25 @@ void WavetableDisplay::setMorphPos(float pos) {
 
 // ── Path builder ─────────────────────────────────────────────────────────────
 juce::Path WavetableDisplay::buildWaveformPath(const juce::Rectangle<float>& area) const {
-    const auto& bank     = WavetableBankLibrary::get().bank(bankIdx_);
-    const int   nPoints  = 256;
-    const float cx       = area.getCentreX();
-    const float cy       = area.getCentreY();
-    const float halfH    = area.getHeight() * 0.44f;
+    const auto& bank    = WavetableBankLibrary::get().bank(bankIdx_);
+    const int   nPoints = 256;
+    const float cy      = area.getCentreY();
+    const float halfH   = area.getHeight() * 0.44f;
 
     juce::Path p;
     bool first = true;
     for (int i = 0; i <= nPoints; ++i) {
         float phase01 = (float)i / nPoints;
-        float sample  = bank.getSample(phase01, morphPos_);   // [-1, 1]
+        // Apply same warp transforms for visualization
+        if (warpMode_ == 1 && warpAmt_ > 1e-4f) {   // PhaseBend
+            phase01 += warpAmt_ * std::sin(6.28318f * phase01);
+            phase01 -= std::floor(phase01);
+        } else if (warpMode_ == 3 && warpAmt_ > 1e-4f) {  // Mirror
+            float pm = (phase01 > 0.5f) ? 1.f - phase01 : phase01;
+            pm *= 2.f;
+            phase01 = phase01 + warpAmt_ * (pm - phase01);
+        }
+        float sample = bank.getSample(phase01, morphPos_);
         float x = area.getX() + (float)i / nPoints * area.getWidth();
         float y = cy - sample * halfH;
         if (first) { p.startNewSubPath(x, y); first = false; }
@@ -123,6 +131,17 @@ void WavetableDisplay::paint(juce::Graphics& g) {
                                                        juce::PathStrokeType::rounded));
 
     g.restoreState();
+
+    // ── Warp badge (top-left of waveform area) ────────────────────────────────
+    if (warpMode_ > 0) {
+        static const char* badges[] = { "", "PB", "SM", "MR" };
+        const juce::Colour badgeCol { 0xFFFF9800u };
+        g.setColour(badgeCol.withAlpha(0.25f));
+        g.fillRoundedRectangle(3.f, (float)kHdrH + 2.f, 18.f, 11.f, 2.f);
+        g.setColour(badgeCol);
+        g.setFont(juce::Font(7.5f, juce::Font::bold));
+        g.drawText(badges[warpMode_], 3, kHdrH + 2, 18, 11, juce::Justification::centred);
+    }
 
     // ── Frame dots ────────────────────────────────────────────────────────────
     const float dotY   = dotRowY + kDotRow * 0.5f;

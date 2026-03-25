@@ -30,9 +30,20 @@ void SynthEngine::setFilterType(int t) {
     for (auto& v : voices_) v.setFilterType(t);
 }
 
+void SynthEngine::setOscEngine(int oscIdx, OscEngineType t) {
+    for (auto& v : voices_) v.setOscEngine(oscIdx, t);
+}
+
 void SynthEngine::setOscBankIndex(int oscIdx, int bankIdx) {
     for (auto& v : voices_) v.setOscBankIndex(oscIdx, bankIdx);
 }
+
+void SynthEngine::setGranularDensity  (int osc, float val) { for (auto& v : voices_) v.setGranularDensity  (osc, val); }
+void SynthEngine::setGranularSize     (int osc, float val) { for (auto& v : voices_) v.setGranularSize     (osc, val); }
+void SynthEngine::setGranularSpray    (int osc, float val) { for (auto& v : voices_) v.setGranularSpray    (osc, val); }
+void SynthEngine::setGranularPitchScat(int osc, float val) { for (auto& v : voices_) v.setGranularPitchScat(osc, val); }
+void SynthEngine::setOscWarpMode  (int osc, int  mode)     { for (auto& v : voices_) v.setOscWarpMode  (osc, mode); }
+void SynthEngine::setOscWarpAmount(int osc, float amt)      { for (auto& v : voices_) v.setOscWarpAmount(osc, amt);  }
 
 void SynthEngine::setOscMorphPos(int oscIdx, float morph) {
     for (auto& v : voices_) v.setOscMorphPos(oscIdx, morph);

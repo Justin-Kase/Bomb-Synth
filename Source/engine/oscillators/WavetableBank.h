@@ -11,6 +11,10 @@ static constexpr int kWTSize   = 2048;
 static constexpr int kWTFrames = 8;
 static constexpr int kWTBanks  = 6;
 
+// ── Spectral warp modes ────────────────────────────────────────────────────────
+enum class WarpMode { None=0, PhaseBend, Smear, Mirror };
+static constexpr const char* kWarpNames[] = { "None","Phase Bend","Smear","Mirror" };
+
 // ── WavetableFrame ─────────────────────────────────────────────────────────────
 struct WavetableFrame {
     std::array<float, kWTSize> data {};

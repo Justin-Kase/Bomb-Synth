@@ -21,9 +21,12 @@ public:
 
     void setBankIndex(int idx);
     void setMorphPos (float pos01);   // [0, 1]
+    void setWarpMode (int mode)       { warpMode_ = mode; repaint(); }
+    void setWarpAmt  (float amt)      { warpAmt_  = amt;  repaint(); }
 
-    int   getBankIndex() const { return bankIdx_; }
+    int   getBankIndex() const { return bankIdx_;  }
     float getMorphPos()  const { return morphPos_; }
+    int   getWarpMode()  const { return warpMode_; }
 
     // juce::Component overrides
     void paint        (juce::Graphics&)                     override;
@@ -36,6 +39,8 @@ public:
 private:
     int   bankIdx_  = 0;
     float morphPos_ = 0.f;
+    int   warpMode_ = 0;
+    float warpAmt_  = 0.f;
     bool  hoverL_    = false;
     bool  hoverR_    = false;
     bool  hoverLoad_ = false;

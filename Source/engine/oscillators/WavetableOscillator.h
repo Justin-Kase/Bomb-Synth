@@ -13,7 +13,9 @@ public:
 
     void setFrequency(float hz);
     void setMorphPosition(float pos01);   // 0 = frame 0, 1 = frame 7
-    void setGain(float g)  { gain_ = g;  }
+    void setGain(float g)        { gain_     = g; }
+    void setWarpMode  (WarpMode m) { warpMode_ = m; }
+    void setWarpAmount(float a)    { warpAmt_  = a; }
 
     // Legacy frame-load interface (copies into local storage)
     void loadFrames(const std::vector<std::vector<float>>& frames);
@@ -28,11 +30,13 @@ private:
     WavetableBank localBank_;
     bool usingLocalBank_ = false;
 
-    double sampleRate_  = 44100.0;
-    float  frequency_   = 440.f;
-    double phase_       = 0.0;   // [0, 1)
-    double phaseInc_    = 0.0;
-    float  morphPos_    = 0.f;   // [0, 1]
-    float  gain_        = 1.f;
-    int    bankIdx_     = 0;
+    double   sampleRate_  = 44100.0;
+    float    frequency_   = 440.f;
+    double   phase_       = 0.0;   // [0, 1)
+    double   phaseInc_    = 0.0;
+    float    morphPos_    = 0.f;   // [0, 1]
+    float    gain_        = 1.f;
+    int      bankIdx_     = 0;
+    WarpMode warpMode_    = WarpMode::None;
+    float    warpAmt_     = 0.f;
 };

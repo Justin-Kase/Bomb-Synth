@@ -1,11 +1,13 @@
 #include "Voice.h"
 #include <cmath>
+#include <algorithm>
 
 void Voice::prepare(double sr, int blockSize) {
     sampleRate_ = sr;
     blockSize_  = blockSize;
     for (auto& o : analogOscs_)    o.prepare(sr);
     for (auto& o : wavetableOscs_) o.prepare(sr);
+    for (auto& o : granularOscs_)  o.prepare(sr);
     ladderFilter_.prepare(sr, blockSize);
     svfFilter_.prepare(sr);
     formantFilter_.prepare(sr);
@@ -29,12 +31,15 @@ void Voice::noteOn(int midiNote, float velocity) {
         float hz = midiNoteToHz(midiNote, oscTune_[i] + modPitch_);
         analogOscs_[i].setFrequency(hz);
         wavetableOscs_[i].setFrequency(hz);
+        if (oscTypes_[i] == OscEngineType::Granular)
+            granularOscs_[i].noteOn();
     }
     ampEnv_.noteOn();
     filterEnv_.noteOn();
 }
 
 void Voice::noteOff() {
+    for (auto& o : granularOscs_) o.noteOff();
     ampEnv_.noteOff();
     filterEnv_.noteOff();
 }
@@ -51,7 +56,18 @@ void Voice::reset() {
 bool Voice::isActive() const { return !ampEnv_.isIdle(); }
 
 void Voice::setOscEngine(int idx, OscEngineType t) {
-    if (idx >= 0 && idx < kNumOscs) oscTypes_[idx] = t;
+    if (idx < 0 || idx >= kNumOscs) return;
+    if (oscTypes_[idx] == t) return;
+    oscTypes_[idx] = t;
+    if (t == OscEngineType::Granular) {
+        int bankIdx = (oscBanks_[idx] < 0) ? 0 : oscBanks_[idx];
+        const auto& bank = WavetableBankLibrary::get().bank(bankIdx);
+        juce::AudioBuffer<float> buf(1, kWTSize);
+        std::copy(bank.frames[0].data.data(),
+                  bank.frames[0].data.data() + kWTSize,
+                  buf.getWritePointer(0));
+        granularOscs_[idx].loadSample(buf);
+    }
 }
 
 void Voice::setOscBankIndex(int oscIdx, int bankIdx) {
@@ -59,6 +75,14 @@ void Voice::setOscBankIndex(int oscIdx, int bankIdx) {
     if (oscBanks_[oscIdx] == bankIdx)     return;
     oscBanks_[oscIdx] = bankIdx;
     wavetableOscs_[oscIdx].setBankIndex(bankIdx);
+    if (oscTypes_[oscIdx] == OscEngineType::Granular) {
+        const auto& bank = WavetableBankLibrary::get().bank(bankIdx);
+        juce::AudioBuffer<float> buf(1, kWTSize);
+        std::copy(bank.frames[0].data.data(),
+                  bank.frames[0].data.data() + kWTSize,
+                  buf.getWritePointer(0));
+        granularOscs_[oscIdx].loadSample(buf);
+    }
 }
 
 void Voice::setOscMorphPos(int oscIdx, float morph01) {
@@ -127,7 +151,7 @@ void Voice::renderBlock(juce::AudioBuffer<float>& buffer, int startSample, int n
     for (int i = 0; i < kNumOscs; ++i) {
         if (oscLevels_[i] < 1e-4f) continue;
 
-        std::vector<float> tmp(numSamples);
+        std::vector<float> tmp(numSamples, 0.f);
         switch (oscTypes_[i]) {
             case OscEngineType::Wavetable:
                 wavetableOscs_[i].processBlock(tmp.data(), numSamples);
@@ -135,6 +159,22 @@ void Voice::renderBlock(juce::AudioBuffer<float>& buffer, int startSample, int n
             case OscEngineType::Analog:
                 analogOscs_[i].processBlock(tmp.data(), numSamples);
                 break;
+            case OscEngineType::Granular: {
+                auto& ge = granularOscs_[i];
+                auto& gp = granParams_[i];
+                ge.setFrequency(midiNoteToHz(midiNote_, oscTune_[i] + modPitch_));
+                ge.setPosition  (juce::jlimit(0.f, 1.f, baseMorph_[i] + modMorph_[i]));
+                ge.setDensity   (gp.density);
+                ge.setGrainSize (gp.size);
+                ge.setSpray     (gp.spray);
+                ge.setPitchScatter(gp.pitchScat);
+                std::vector<float> tmpR(numSamples, 0.f);
+                ge.processBlock(tmp.data(), tmpR.data(), numSamples);
+                const float scale = 0.5f * oscLevels_[i];
+                for (int s = 0; s < numSamples; ++s)
+                    tmp[s] = (tmp[s] + tmpR[s]) * scale;
+                break;
+            }
             default: break;
         }
         juce::FloatVectorOperations::add(mono, tmp.data(), numSamples);

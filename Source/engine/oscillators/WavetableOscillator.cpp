@@ -50,8 +50,31 @@ void WavetableOscillator::processBlock(float* out, int n) {
         std::fill(out, out + n, 0.f);
         return;
     }
+    const bool doWarp = (warpMode_ != WarpMode::None && warpAmt_ > 1e-4f);
     for (int i = 0; i < n; ++i) {
-        out[i] = currentBank_->getSample((float)phase_, morphPos_) * gain_;
+        if (!doWarp) {
+            out[i] = currentBank_->getSample((float)phase_, morphPos_) * gain_;
+        } else if (warpMode_ == WarpMode::PhaseBend) {
+            float p = (float)phase_ + warpAmt_ * std::sin(6.28318f * (float)phase_);
+            p -= std::floor(p);
+            out[i] = currentBank_->getSample(p, morphPos_) * gain_;
+        } else if (warpMode_ == WarpMode::Smear) {
+            const float spread = warpAmt_ * (8.f / (float)kWTSize);
+            const int   nTaps  = (int)(warpAmt_ * 8.f) + 1;
+            float sum = 0.f;
+            for (int k = -nTaps; k <= nTaps; ++k) {
+                float p = (float)phase_ + k * spread;
+                p -= std::floor(p);
+                sum += currentBank_->getSample(p, morphPos_);
+            }
+            out[i] = (sum / (float)(2 * nTaps + 1)) * gain_;
+        } else { // Mirror
+            float p  = (float)phase_;
+            float pm = (p > 0.5f) ? 1.f - p : p;
+            pm *= 2.f;
+            float wp = p + warpAmt_ * (pm - p);
+            out[i] = currentBank_->getSample(wp, morphPos_) * gain_;
+        }
         phase_ += phaseInc_;
         if (phase_ >= 1.0) phase_ -= 1.0;
     }
