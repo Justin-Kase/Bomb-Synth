@@ -21,12 +21,15 @@ void SequencerPanel::resized() {
 
     // Global controls strip
     auto hdr = bounds.removeFromTop(kHeaderH);
-    int bw = 40, gap = 4;
+    int gap = 4;
     int x = hdr.getX() + gap;
     int cy = hdr.getCentreY();
     playBtnR_ = { x, cy - 14, 34, 28 };  x += 34 + gap;
     stopBtnR_ = { x, cy - 14, 34, 28 };  x += 34 + gap * 3;
-    bpmLabelR_= { x, cy - 14, 64, 28 };  x += 64 + gap;
+    // BPM with dec/inc buttons
+    bpmDecR_  = { x, cy - 14, 24, 28 };  x += 24;
+    bpmLabelR_= { x, cy - 14, 64, 28 };  x += 64;
+    bpmIncR_  = { x, cy - 14, 24, 28 };  x += 24 + gap;
     syncBtnR_ = { x, cy - 14, 68, 28 };  x += 68 + gap * 3;
     rootBtnR_ = { x, cy - 14, 44, 28 };  x += 44 + gap;
     scaleBtnR_= { x, cy - 14, 100, 28 }; x += 100 + gap * 3;
@@ -46,9 +49,9 @@ void SequencerPanel::resized() {
         int lH = bounds.getHeight() / (nL - l);
         auto lBounds = bounds.removeFromTop(lH);
 
-        // Lane header — 4-row layout
+        // Lane header — 5-row layout
         auto lHdr = lBounds.removeFromLeft(kLaneHdrW).reduced(3, 2);
-        const int rowH = lHdr.getHeight() / 4;
+        const int rowH = lHdr.getHeight() / 5;
         const int px   = lHdr.getX();
 
         // Row 0: Lane label + [RND] button
@@ -66,21 +69,26 @@ void SequencerPanel::resized() {
         octDecR_[l] = { px + 18, row2.getCentreY() - 9, 18, 18 };
         octIncR_[l] = { px + 60, row2.getCentreY() - 9, 18, 18 };
 
-        // Row 3: Per-lane ARP controls: [ARP] [mode] [rate] [oct]
-        auto row3 = lHdr;
-        const int aw = (row3.getWidth()) / 4 - 2;
-        laneArpBtnR_ [l] = { row3.getX(),              row3.getY(), aw,     row3.getHeight() - 2 };
-        laneArpModeR_[l] = { row3.getX() + aw + 2,    row3.getY(), aw + 8, row3.getHeight() - 2 };
-        laneArpRateR_[l] = { row3.getX() + aw*2 + 12, row3.getY(), aw,     row3.getHeight() - 2 };
-        laneArpOctR_ [l] = { row3.getX() + aw*3 + 14, row3.getY(), aw,     row3.getHeight() - 2 };
+        // Row 3: Swing spinner
+        auto row3 = lHdr.removeFromTop(rowH);
+        swingR_[l * 2]     = { px + 18, row3.getCentreY() - 9, 18, 18 };  // dec
+        swingR_[l * 2 + 1] = { px + 60, row3.getCentreY() - 9, 18, 18 };  // inc
+
+        // Row 4: Per-lane ARP controls: [ARP] [mode] [rate] [oct]
+        auto row4 = lHdr;
+        const int aw = (row4.getWidth()) / 4 - 2;
+        laneArpBtnR_ [l] = { row4.getX(),              row4.getY(), aw,     row4.getHeight() - 2 };
+        laneArpModeR_[l] = { row4.getX() + aw + 2,    row4.getY(), aw + 8, row4.getHeight() - 2 };
+        laneArpRateR_[l] = { row4.getX() + aw*2 + 12, row4.getY(), aw,     row4.getHeight() - 2 };
+        laneArpOctR_ [l] = { row4.getX() + aw*3 + 14, row4.getY(), aw,     row4.getHeight() - 2 };
 
         // Step grid
         rebuildStepRects(lBounds.reduced(2), l);
     }
 
-    // Detail controls (note, vel, prob, utime)
+    // Detail controls (note, vel, prob, utime, glen) — 5 fields
     auto det = detailR_.reduced(8, 6);
-    int dw = 120, dgap = 12;
+    int dw = 96, dgap = 8;
     auto makeSpinner = [&](juce::Rectangle<int>* dec, juce::Rectangle<int>* inc, int startX) {
         *dec = { startX, det.getCentreY() - 11, 22, 22 };
         *inc = { startX + dw - 22, det.getCentreY() - 11, 22, 22 };
@@ -89,6 +97,7 @@ void SequencerPanel::resized() {
     makeSpinner(&detVelBtnR_[0],   &detVelBtnR_[1],   det.getX() + dw + dgap);
     makeSpinner(&detProbBtnR_[0],  &detProbBtnR_[1],  det.getX() + (dw + dgap) * 2);
     makeSpinner(&detUTimeBtnR_[0], &detUTimeBtnR_[1], det.getX() + (dw + dgap) * 3);
+    makeSpinner(&detGlenBtnR_[0],  &detGlenBtnR_[1],  det.getX() + (dw + dgap) * 4);
 }
 
 void SequencerPanel::rebuildStepRects(juce::Rectangle<int> area, int laneIdx) {
@@ -120,9 +129,12 @@ void SequencerPanel::paint(juce::Graphics& g) {
 }
 
 void SequencerPanel::drawGlobalControls(juce::Graphics& g) {
-    const juce::Colour col(0xFF1A1A2E);
-    g.setColour(col);
-    g.fillRoundedRectangle(getLocalBounds().removeFromTop(kHeaderH).toFloat().reduced(2), 6.f);
+    // Header gradient
+    auto hdrR = getLocalBounds().removeFromTop(kHeaderH).toFloat().reduced(2);
+    juce::ColourGradient grad(juce::Colour(0xFF1A1A38), hdrR.getX(), hdrR.getY(),
+                              juce::Colour(0xFF12121E), hdrR.getX(), hdrR.getBottom(), false);
+    g.setGradientFill(grad);
+    g.fillRoundedRectangle(hdrR, 6.f);
 
     auto btn = [&](juce::Rectangle<int> r, const juce::String& label,
                    bool active, juce::Colour c = juce::Colour(0xFF4FC3F7)) {
@@ -139,9 +151,15 @@ void SequencerPanel::drawGlobalControls(juce::Graphics& g) {
     btn(stopBtnR_, "■",  false, juce::Colour(0xFFFF3B6F));
     btn(syncBtnR_, seq_.syncDAW ? "DAW SYNC" : "FREE", seq_.syncDAW, juce::Colour(0xFFFFD740));
 
-    // BPM display
+    // BPM display with dec/inc
     g.setColour(juce::Colour(0xFF1E2030));
+    g.fillRoundedRectangle(bpmDecR_.toFloat(), 4.f);
     g.fillRoundedRectangle(bpmLabelR_.toFloat(), 4.f);
+    g.fillRoundedRectangle(bpmIncR_.toFloat(), 4.f);
+    g.setColour(juce::Colour(0xFF4FC3F7).withAlpha(0.6f));
+    g.setFont(juce::Font(10.f, juce::Font::bold));
+    g.drawText("<", bpmDecR_, juce::Justification::centred);
+    g.drawText(">", bpmIncR_, juce::Justification::centred);
     g.setColour(juce::Colour(0xFF607080));
     g.drawRoundedRectangle(bpmLabelR_.toFloat().reduced(0.5f), 4.f, 1.f);
     g.setFont(juce::Font(11.f, juce::Font::bold));
@@ -231,6 +249,11 @@ void SequencerPanel::drawLane(juce::Graphics& g, int laneIdx, juce::Rectangle<in
     drawSpinner(octDecR_[laneIdx], octIncR_[laneIdx],
                 juce::String(lane.octave > 0 ? "+" : "") + juce::String(lane.octave), "OCT");
 
+    // Row 3: Swing spinner
+    int swingPct = (int)(lane.swing * 100);
+    drawSpinner(swingR_[laneIdx * 2], swingR_[laneIdx * 2 + 1],
+                juce::String(swingPct) + "%", "SWG");
+
     // Row 3: Per-lane ARP controls
     const juce::Colour arpCol(0xFFFF9800);
     smallBtn(laneArpBtnR_[laneIdx], "ARP", lane.arpEnabled, arpCol);
@@ -260,6 +283,10 @@ void SequencerPanel::drawLane(juce::Graphics& g, int laneIdx, juce::Rectangle<in
     g.setColour(juce::Colour(0xFF0E0E1C));
     g.fillRoundedRectangle(bounds.toFloat().reduced(1), 4.f);
 
+    // Lane separator line at top of this lane's full width
+    g.setColour(lc.withAlpha(0.15f));
+    g.fillRect(juce::Rectangle<int>(0, bounds.getY(), getWidth(), 1));
+
     // Draw step cells for this lane
     for (const auto& sr : stepRects_) {
         if (sr.lane != laneIdx) continue;
@@ -270,22 +297,45 @@ void SequencerPanel::drawLane(juce::Graphics& g, int laneIdx, juce::Rectangle<in
 
         auto r = sr.r.toFloat();
 
-        // Cell background
-        g.setColour(isEven ? juce::Colour(0xFF111128) : juce::Colour(0xFF0D0D20));
+        // Beat marker background (every 4 steps)
+        bool isBeatStart = (sr.step % 4 == 0);
+        g.setColour(isBeatStart ? juce::Colour(0xFF141428) : (isEven ? juce::Colour(0xFF111128) : juce::Colour(0xFF0D0D20)));
         g.fillRoundedRectangle(r, 3.f);
 
         if (step.gate) {
-            // Velocity fill (height proportional to velocity)
+            // Velocity fill with gradient (brighter at top)
             float fillH = r.getHeight() * step.vel;
             auto fillR  = r.withTop(r.getBottom() - fillH);
-            // Probability alpha
             float alpha = 0.25f + step.prob * 0.75f;
-            g.setColour(lc.withAlpha(isCurrent ? alpha : alpha * 0.7f));
+            float a = isCurrent ? alpha : alpha * 0.7f;
+            juce::ColourGradient velGrad(lc.brighter(0.4f).withAlpha(a), fillR.getX(), fillR.getY(),
+                                         lc.withAlpha(a * 0.6f), fillR.getX(), fillR.getBottom(), false);
+            g.setGradientFill(velGrad);
             g.fillRoundedRectangle(fillR, 3.f);
 
-            // Top bright line
-            g.setColour(lc.withAlpha(isCurrent ? 1.f : 0.5f));
-            g.fillRect(fillR.withHeight(1.5f));
+            // Gate length bar at top (3px height)
+            float gateBarW = r.getWidth() * juce::jlimit(0.f, 1.f, step.gateLen);
+            g.setColour(lc.withAlpha(0.6f));
+            g.fillRect(juce::Rectangle<float>(r.getX(), r.getY(), gateBarW, 3.f));
+
+            // Note name overlay (only if cell >= 28px wide)
+            if (sr.r.getWidth() >= 28) {
+                g.setColour(juce::Colours::white.withAlpha(0.7f));
+                g.setFont(juce::Font(7.5f));
+                int displayNote = juce::jlimit(0, 127, step.note + lane.octave * 12);
+                g.drawText(noteName(displayNote), r.reduced(1.f, 4.f), juce::Justification::centred, false);
+            }
+
+            // Playhead glow: bright top-edge line
+            if (isCurrent) {
+                g.setColour(lc.withAlpha(1.0f));
+                g.fillRect(juce::Rectangle<float>(r.getX(), r.getY(), r.getWidth(), 2.f));
+            }
+        } else {
+            // Step number (bottom-right) when gate is off
+            g.setColour(juce::Colours::white.withAlpha(0.3f));
+            g.setFont(juce::Font(6.5f));
+            g.drawText(juce::String(sr.step + 1), r.reduced(1.f, 1.f), juce::Justification::bottomRight, false);
         }
 
         // Microtiming indicator (small triangle at bottom)
@@ -366,7 +416,8 @@ void SequencerPanel::drawStepDetail(juce::Graphics& g) {
               detNoteBtnR_[0],  detNoteBtnR_[1]);
     drawField("VEL",    juce::String((int)(step.vel  * 100)) + "%",  detVelBtnR_[0],   detVelBtnR_[1]);
     drawField("PROB",   juce::String((int)(step.prob * 100)) + "%",  detProbBtnR_[0],  detProbBtnR_[1]);
-    drawField("μTIME",  juce::String((int)(step.utime * 100)) + "%", detUTimeBtnR_[0], detUTimeBtnR_[1]);
+    drawField("\u03bcTIME",  juce::String((int)(step.utime * 100)) + "%", detUTimeBtnR_[0], detUTimeBtnR_[1]);
+    drawField("GLEN",   juce::String((int)(step.gateLen * 100)) + "%", detGlenBtnR_[0],  detGlenBtnR_[1]);
 
     // Gate indicator
     g.setFont(juce::Font(9.f));
@@ -374,6 +425,13 @@ void SequencerPanel::drawStepDetail(juce::Graphics& g) {
     g.drawText(step.gate ? "GATE ON" : "GATE OFF",
                detailR_.getRight() - 80, detailR_.getCentreY() - 8, 72, 16,
                juce::Justification::centred);
+
+    // Keyboard shortcut hint
+    g.setFont(juce::Font(7.f));
+    g.setColour(juce::Colour(0xFF405060));
+    g.drawText("Shift+click note \u00b1octave  |  drag step = velocity",
+               detailR_.getX() + 8, detailR_.getBottom() - 14, detailR_.getWidth() - 90, 12,
+               juce::Justification::right);
 }
 
 // ─── Mouse ────────────────────────────────────────────────────────────────────
@@ -389,7 +447,7 @@ void SequencerPanel::mouseDown(const juce::MouseEvent& e) {
     auto pt = e.getPosition();
 
     // Check global controls
-    if (pt.getY() < kHeaderH) { handleGlobalClick(pt); return; }
+    if (pt.getY() < kHeaderH) { handleGlobalClick(pt, e.mods.isShiftDown()); return; }
 
     // Check detail controls
     if (detailR_.contains(pt)) {
@@ -404,6 +462,8 @@ void SequencerPanel::mouseDown(const juce::MouseEvent& e) {
         if (detProbBtnR_[1].contains(pt)) { step.prob = juce::jlimit(0.f,1.f, step.prob + 0.1f);  if(onStateChanged) onStateChanged(); repaint(); return; }
         if (detUTimeBtnR_[0].contains(pt)){ step.utime= juce::jlimit(-0.5f,0.5f, step.utime - 0.05f); if(onStateChanged) onStateChanged(); repaint(); return; }
         if (detUTimeBtnR_[1].contains(pt)){ step.utime= juce::jlimit(-0.5f,0.5f, step.utime + 0.05f); if(onStateChanged) onStateChanged(); repaint(); return; }
+        if (detGlenBtnR_[0].contains(pt)) { step.gateLen = juce::jlimit(0.f,1.f, step.gateLen - 0.05f); if(onStateChanged) onStateChanged(); repaint(); return; }
+        if (detGlenBtnR_[1].contains(pt)) { step.gateLen = juce::jlimit(0.f,1.f, step.gateLen + 0.05f); if(onStateChanged) onStateChanged(); repaint(); return; }
         return;
     }
 
@@ -416,6 +476,8 @@ void SequencerPanel::mouseDown(const juce::MouseEvent& e) {
         if (stepsIncR_[l].contains(pt)) { lane.numSteps = juce::jlimit(1, SequencerLane::kMaxSteps, lane.numSteps + 1); resized(); repaint(); if(onStateChanged) onStateChanged(); return; }
         if (octDecR_[l].contains(pt))   { lane.octave   = juce::jlimit(-3, 3, lane.octave - 1); repaint(); if(onStateChanged) onStateChanged(); return; }
         if (octIncR_[l].contains(pt))   { lane.octave   = juce::jlimit(-3, 3, lane.octave + 1); repaint(); if(onStateChanged) onStateChanged(); return; }
+        if (swingR_[l*2].contains(pt))  { lane.swing    = juce::jlimit(0.f, 1.f, lane.swing - 0.05f); repaint(); if(onStateChanged) onStateChanged(); return; }
+        if (swingR_[l*2+1].contains(pt)){ lane.swing    = juce::jlimit(0.f, 1.f, lane.swing + 0.05f); repaint(); if(onStateChanged) onStateChanged(); return; }
         if (laneActiveR_[l].contains(pt)){ lane.active  = !lane.active; repaint(); if(onStateChanged) onStateChanged(); return; }
 
         // [RND] — randomize this lane's step pattern
@@ -506,13 +568,19 @@ void SequencerPanel::mouseUp(const juce::MouseEvent&) {
     }
 }
 
-void SequencerPanel::handleGlobalClick(juce::Point<int> pt) {
+void SequencerPanel::handleGlobalClick(juce::Point<int> pt, bool shiftDown) {
     if (playBtnR_.contains(pt)) {
         seq_.setPlaying(!seq_.playing);
     } else if (stopBtnR_.contains(pt)) {
         juce::MidiBuffer dummy;
         seq_.stop(dummy);
         for (auto& lane : seq_.lanes) lane.currentStep = 0;
+    } else if (bpmDecR_.contains(pt)) {
+        float step = shiftDown ? 10.f : 1.f;
+        seq_.bpm = juce::jlimit(20.f, 300.f, seq_.bpm - step);
+    } else if (bpmIncR_.contains(pt)) {
+        float step = shiftDown ? 10.f : 1.f;
+        seq_.bpm = juce::jlimit(20.f, 300.f, seq_.bpm + step);
     } else if (syncBtnR_.contains(pt)) {
         seq_.syncDAW = !seq_.syncDAW;
     } else if (rootBtnR_.contains(pt)) {

@@ -58,13 +58,17 @@ private:
     juce::Rectangle<int> rootBtnR_, scaleBtnR_, lanesDecR_, lanesIncR_;
     juce::Rectangle<int> arpBtnR_, arpModeR_;  // kept for global toolbar remnants
     std::array<juce::Rectangle<int>, Sequencer::kMaxLanes> stepsDecR_, stepsIncR_,
-        octDecR_, octIncR_, swingR_, laneActiveR_,
+        octDecR_, octIncR_, laneActiveR_,
         laneArpBtnR_, laneArpModeR_, laneArpRateR_, laneArpOctR_, laneRndBtnR_;
+    std::array<juce::Rectangle<int>, Sequencer::kMaxLanes * 2> swingR_;  // [l*2]=dec, [l*2+1]=inc
 
     juce::Rectangle<int> detailR_;
 
     // Step detail controls
-    juce::Rectangle<int> detNoteBtnR_[2], detVelBtnR_[2], detProbBtnR_[2], detUTimeBtnR_[2];
+    juce::Rectangle<int> detNoteBtnR_[2], detVelBtnR_[2], detProbBtnR_[2], detUTimeBtnR_[2], detGlenBtnR_[2];
+
+    // Global header BPM inc/dec
+    juce::Rectangle<int> bpmDecR_, bpmIncR_;
 
     void rebuildStepRects(juce::Rectangle<int> laneArea, int laneIdx);
     void drawGlobalControls(juce::Graphics&);
@@ -72,7 +76,7 @@ private:
     void drawStepDetail(juce::Graphics&);
 
     const StepRect* hitTestStep(juce::Point<int> pt) const;
-    void handleGlobalClick(juce::Point<int> pt);
+    void handleGlobalClick(juce::Point<int> pt, bool shiftDown = false);
     void handleLaneClick(juce::Point<int> pt, int lane);
 
     static juce::Colour laneColour(int l) { return juce::Colour(kLaneColours[l % 4]); }
