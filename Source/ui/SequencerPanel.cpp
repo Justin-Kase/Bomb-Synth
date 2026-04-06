@@ -303,15 +303,17 @@ void SequencerPanel::drawLane(juce::Graphics& g, int laneIdx, juce::Rectangle<in
         g.fillRoundedRectangle(r, 3.f);
 
         if (step.gate) {
-            // Velocity fill with gradient (brighter at top)
+            // Velocity fill with gradient (brighter at top) — guard against zero height
             float fillH = r.getHeight() * step.vel;
-            auto fillR  = r.withTop(r.getBottom() - fillH);
-            float alpha = 0.25f + step.prob * 0.75f;
-            float a = isCurrent ? alpha : alpha * 0.7f;
-            juce::ColourGradient velGrad(lc.brighter(0.4f).withAlpha(a), fillR.getX(), fillR.getY(),
-                                         lc.withAlpha(a * 0.6f), fillR.getX(), fillR.getBottom(), false);
-            g.setGradientFill(velGrad);
-            g.fillRoundedRectangle(fillR, 3.f);
+            if (fillH >= 1.f) {
+                auto fillR  = r.withTop(r.getBottom() - fillH);
+                float alpha = 0.25f + step.prob * 0.75f;
+                float a = isCurrent ? alpha : alpha * 0.7f;
+                juce::ColourGradient velGrad(lc.brighter(0.4f).withAlpha(a), fillR.getX(), fillR.getY(),
+                                             lc.withAlpha(a * 0.6f), fillR.getX(), fillR.getBottom() + 1.f, false);
+                g.setGradientFill(velGrad);
+                g.fillRoundedRectangle(fillR, 3.f);
+            }
 
             // Gate length bar at top (3px height)
             float gateBarW = r.getWidth() * juce::jlimit(0.f, 1.f, step.gateLen);
