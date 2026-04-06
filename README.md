@@ -200,8 +200,18 @@ Header bar: title · preset browser (category + name + `< >`) · version + brand
 
 ## Build
 
+### Quick build (recommended)
+
 ```bash
-# Configure (downloads JUCE via CMake FetchContent)
+bash scripts/build.sh
+```
+
+This configures, builds, and installs the plugin to your local plugin folders automatically.
+
+### Manual build
+
+```bash
+# Configure (downloads JUCE 8.0.12 via CMake FetchContent)
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
 # Build
@@ -210,6 +220,16 @@ cmake --build build --config Release
 # VST3: build/Source/BombSynth_artefacts/Release/VST3/Bomb Synth.vst3
 # AU:   build/Source/BombSynth_artefacts/Release/AU/Bomb Synth.component
 ```
+
+### Install / fix Gatekeeper issues
+
+If the plugin loads on your build machine but fails in Bitwig/Ableton on another Mac:
+
+```bash
+bash scripts/install.sh
+```
+
+This copies the built plugin to `~/Library/Audio/Plug-Ins/VST3/` (and AU), strips the quarantine flag, and applies ad-hoc code signing. Run it once on each new machine after copying the plugin over.
 
 ### Prerequisites
 - CMake 3.21+  ·  C++17 compiler
@@ -242,6 +262,15 @@ See **[SPEC.md](SPEC.md)** for full DSP notes, class hierarchy, and signal flow 
 ---
 
 ## Changelog
+
+### v0.8.0 (April 2026)
+- **Sequencer UI improvements** — note names (e.g. "C4") overlaid on active step cells; gate length bar across top of each cell; velocity fill with gradient; step numbers on inactive cells; beat markers every 4 steps; playhead glow on current step; lane separators; header gradient
+- **Swing control** — per-lane swing spinner now visible in lane header (was in engine, never exposed in UI)
+- **BPM clickable** — `< >` buttons flanking BPM display; Shift±10 for fast adjustment; clamped 20–300
+- **Gate length in detail panel** — GLEN field added alongside NOTE / VEL / PROB / μTIME
+- **Build scripts** — `scripts/build.sh` (one-command CMake Release build) and `scripts/install.sh` (copies VST3+AU to plugin dirs, strips quarantine flag, applies ad-hoc code signing — fixes Gatekeeper issues on other Macs)
+- **JUCE pinned to 8.0.12** — prevents silent breakage from upstream JUCE `master` changes
+- **Keyboard hints** — detail panel shows "Shift+click note ±octave | drag step = velocity"
 
 ### v0.7.0 (March 2026)
 - **9 oscillator engines** — mode button cycles: WT → GR → Sine → Saw → SuperSaw → Square → Triangle → SawTri → Noise. MORPH knob repurposed: SuperSaw = detune spread, Square = pulse width.
