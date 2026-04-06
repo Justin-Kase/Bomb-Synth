@@ -554,6 +554,7 @@ BombSynthAudioProcessorEditor::BombSynthAudioProcessorEditor(BombSynthAudioProce
 
     addAndMakeVisible(sequencerPanel_);
     sequencerPanel_.setVisible(false);
+    sequencerPanel_.setBounds(0, 0, 1, 1); // prevent zero-bounds hit-test crash
 
     addAndMakeVisible(*modPanel_);
     modPanel_->setVisible(false);

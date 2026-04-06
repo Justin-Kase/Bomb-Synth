@@ -19,6 +19,9 @@ void SequencerPanel::resized() {
     stepRects_.clear();
     auto bounds = getLocalBounds();
 
+    // Guard against zero-size layout (prevents JUCE hit-test crash)
+    if (bounds.getWidth() < 10 || bounds.getHeight() < 10) return;
+
     // Global controls strip
     auto hdr = bounds.removeFromTop(kHeaderH);
     int gap = 4;
@@ -112,6 +115,7 @@ void SequencerPanel::rebuildStepRects(juce::Rectangle<int> area, int laneIdx) {
 
 // ─── Paint ────────────────────────────────────────────────────────────────────
 void SequencerPanel::paint(juce::Graphics& g) {
+    if (getWidth() < 10 || getHeight() < 10) return;
     // Background
     g.setColour(juce::Colour(0xFF0A0A14));
     g.fillRoundedRectangle(getLocalBounds().toFloat(), 8.f);
