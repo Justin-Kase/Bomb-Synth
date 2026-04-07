@@ -66,6 +66,17 @@ private:
     std::array<float, 3> modLevel_  { 0.f, 0.f, 0.f };
     std::array<float, 3> modFM_     { 0.f, 0.f, 0.f };
     std::array<float, 3> modDetune_ { 0.f, 0.f, 0.f };
+    // Envelope + LFO + master mod accumulators
+    float modFilterEnvAmt_ = 0.f;
+    float modAmpAttack_    = 0.f;
+    float modAmpDecay_     = 0.f;
+    float modAmpSustain_   = 0.f;
+    float modAmpRelease_   = 0.f;
+    float modFEnvAttack_   = 0.f;
+    float modFEnvDecay_    = 0.f;
+    float modFEnvSustain_  = 0.f;
+    float modFEnvRelease_  = 0.f;
+    float modMasterVol_    = 0.f;
 
     // Persisted user wavetable file paths
     juce::StringArray userWavetablePaths_;

@@ -107,10 +107,32 @@ juce::AudioProcessorValueTreeState::ParameterLayout BombSynthAudioProcessor::cre
     //         18=O1FM 19=O2FM 20=O3FM
     //         21=O1Detune 22=O2Detune 23=O3Detune
     //         24=LFO2Rate
+    //         25=AmpAttack 26=AmpDecay 27=AmpSustain 28=AmpRelease
+    //         29=FilterEnvAmt 30=FEnvAttack 31=FEnvDecay 32=FEnvSustain 33=FEnvRelease
+    //         34=LFO1Rate 35=LFO1Depth 36=LFO2Depth 37=MasterVol
     for (int i = 0; i < 8; ++i) {
         String s(i);
-        p.push_back(std::make_unique<AudioParameterInt>  ("mod"+s+"_src", "Mod"+s+" Source", 0, 4, 0));
-        p.push_back(std::make_unique<AudioParameterInt>  ("mod"+s+"_dst", "Mod"+s+" Target", 0, 24, 0));
+        p.push_back(std::make_unique<AudioParameterChoice>(
+            "mod"+s+"_src", "Mod"+s+" Source",
+            juce::StringArray{"Off","LFO 1","LFO 2","Velocity","ModWheel"}, 0));
+        p.push_back(std::make_unique<AudioParameterChoice>(
+            "mod"+s+"_dst", "Mod"+s+" Target",
+            juce::StringArray{
+                "Off",
+                "Cutoff","Resonance","Drive",
+                "Pitch","Amp",
+                "Osc1 Morph","Osc2 Morph","Osc3 Morph",
+                "Osc1 Tune","Osc2 Tune","Osc3 Tune",
+                "Osc1 Fine","Osc2 Fine","Osc3 Fine",
+                "Osc1 Level","Osc2 Level","Osc3 Level",
+                "Osc1 FM","Osc2 FM","Osc3 FM",
+                "Osc1 Detune","Osc2 Detune","Osc3 Detune",
+                "LFO2 Rate",
+                "Amp Attack","Amp Decay","Amp Sustain","Amp Release",
+                "Filter Env Amt","FEnv Attack","FEnv Decay","FEnv Sustain","FEnv Release",
+                "LFO1 Rate","LFO1 Depth","LFO2 Depth",
+                "Master Vol"
+            }, 0));
         p.push_back(std::make_unique<AudioParameterFloat>("mod"+s+"_amt", "Mod"+s+" Amount",
             NormalisableRange<float>{-1.f, 1.f}, i == 0 ? 0.5f : 0.f));
     }
@@ -287,6 +309,16 @@ void BombSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::
     modLevel_   = { 0.f, 0.f, 0.f };
     modFM_      = { 0.f, 0.f, 0.f };
     modDetune_  = { 0.f, 0.f, 0.f };
+    modFilterEnvAmt_ = 0.f;
+    modAmpAttack_    = 0.f;
+    modAmpDecay_     = 0.f;
+    modAmpSustain_   = 0.f;
+    modAmpRelease_   = 0.f;
+    modFEnvAttack_   = 0.f;
+    modFEnvDecay_    = 0.f;
+    modFEnvSustain_  = 0.f;
+    modFEnvRelease_  = 0.f;
+    modMasterVol_    = 0.f;
 
     // ModWheel: read current MIDI CC1 value (0–1)
     float modWheelVal = modWheelValue_;
@@ -342,6 +374,23 @@ void BombSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::
             case 23: modDetune_[2]  += modVal; break;
             // LFO2 Rate
             case 24: lfo2_.setRate(juce::jmax(0.01f, lfo2Rate + modVal * 10.f)); break;
+            // Amp envelope
+            case 25: modAmpAttack_  += modVal; break;
+            case 26: modAmpDecay_   += modVal; break;
+            case 27: modAmpSustain_ += modVal; break;
+            case 28: modAmpRelease_ += modVal; break;
+            // Filter envelope
+            case 29: modFilterEnvAmt_ += modVal;  break;
+            case 30: modFEnvAttack_   += modVal;  break;
+            case 31: modFEnvDecay_    += modVal;  break;
+            case 32: modFEnvSustain_  += modVal;  break;
+            case 33: modFEnvRelease_  += modVal;  break;
+            // LFO rates/depths
+            case 34: lfo1_.setRate(juce::jmax(0.01f, get("lfo1_rate") + modVal * 10.f));   break;
+            case 35: lfo1_.setDepth(juce::jlimit(0.f, 1.f, get("lfo1_depth") + modVal));    break;
+            case 36: lfo2_.setDepth(juce::jlimit(0.f, 1.f, get("lfo2_depth") + modVal));    break;
+            // Master volume
+            case 37: modMasterVol_ += modVal; break;
             default: break;
         }
     }
@@ -359,6 +408,30 @@ void BombSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::
         engine_.setModFM     (i, modFM_[i]);
         engine_.setModDetune (i, modDetune_[i]);
     }
+
+    // Re-apply envelope params with mod offsets accumulated this block
+    if (modAmpAttack_ != 0.f || modAmpDecay_ != 0.f ||
+        modAmpSustain_ != 0.f || modAmpRelease_ != 0.f) {
+        ADSR::Params modAmp = amp;
+        modAmp.attackMs  = juce::jmax(0.f, amp.attackMs  + modAmpAttack_  * 2000.f);
+        modAmp.decayMs   = juce::jmax(0.f, amp.decayMs   + modAmpDecay_   * 2000.f);
+        modAmp.sustain   = juce::jlimit(0.f, 1.f, amp.sustain  + modAmpSustain_);
+        modAmp.releaseMs = juce::jmax(0.f, amp.releaseMs + modAmpRelease_ * 2000.f);
+        engine_.setAmpEnvParams(modAmp);
+    }
+    if (modFEnvAttack_ != 0.f || modFEnvDecay_ != 0.f ||
+        modFEnvSustain_ != 0.f || modFEnvRelease_ != 0.f) {
+        ADSR::Params modFenv = fenv;
+        modFenv.attackMs  = juce::jmax(0.f, fenv.attackMs  + modFEnvAttack_  * 2000.f);
+        modFenv.decayMs   = juce::jmax(0.f, fenv.decayMs   + modFEnvDecay_   * 2000.f);
+        modFenv.sustain   = juce::jlimit(0.f, 1.f, fenv.sustain  + modFEnvSustain_);
+        modFenv.releaseMs = juce::jmax(0.f, fenv.releaseMs + modFEnvRelease_ * 2000.f);
+        engine_.setFilterEnvParams(modFenv);
+    }
+
+    // Apply modulated master gain
+    if (modMasterVol_ != 0.f)
+        engine_.setMasterGain(juce::jmax(0.f, get("master_gain") + modMasterVol_));
 
     // Inject sequencer MIDI before engine processes
     sequencer_.processBlock(midi, buf.getNumSamples(), getPlayHead());

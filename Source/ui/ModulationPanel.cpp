@@ -20,9 +20,17 @@ static const char* kDstNames[] = {
     // Detune
     "Osc1 Detune", "Osc2 Detune", "Osc3 Detune",
     // LFO
-    "LFO2 Rate"
+    "LFO2 Rate",
+    // Amp envelope
+    "Amp Attack", "Amp Decay", "Amp Sustain", "Amp Release",
+    // Filter envelope
+    "Filter Env Amt", "FEnv Attack", "FEnv Decay", "FEnv Sustain", "FEnv Release",
+    // LFOs
+    "LFO1 Rate", "LFO1 Depth", "LFO2 Depth",
+    // Master
+    "Master Vol"
 };
-static constexpr int kNumDstNames = 25;
+static constexpr int kNumDstNames = 38;
 
 ModulationPanel::ModulationPanel(juce::AudioProcessorValueTreeState& params)
     : params_(params)
